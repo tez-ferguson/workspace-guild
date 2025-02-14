@@ -1,9 +1,9 @@
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -13,13 +13,24 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 interface Workspace {
   id: string;
   name: string;
-  created_at: string;
+  owner_id: string;
   role: string;
+  boards: {
+    id: string;
+    name: string;
+    created_at: string;
+  }[];
 }
 
 const Index = () => {
@@ -27,9 +38,9 @@ const Index = () => {
   const { toast } = useToast();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     fetchWorkspaces();
@@ -44,8 +55,8 @@ const Index = () => {
         return;
       }
 
-      // Fetch workspaces where user is a member (including role)
-      const { data: memberWorkspaces, error: memberError } = await supabase
+      // Fetch workspaces where user is either owner or member
+      const { data: workspacesData, error: workspacesError } = await supabase
         .from("workspace_members")
         .select(`
           workspace_id,
@@ -53,24 +64,45 @@ const Index = () => {
           workspaces (
             id,
             name,
-            created_at
+            owner_id
           )
         `)
         .eq("user_id", user.id);
 
-      if (memberError) throw memberError;
+      if (workspacesError) throw workspacesError;
 
-      // Transform the data to match our Workspace interface
-      const transformedWorkspaces = memberWorkspaces
-        .filter(w => w.workspaces) // Filter out any null workspaces
-        .map(w => ({
-          id: w.workspaces.id,
-          name: w.workspaces.name,
-          created_at: w.workspaces.created_at,
-          role: w.role
-        }));
+      // For each workspace, fetch only the boards the user has access to
+      const workspacesWithBoards = await Promise.all(
+        workspacesData.map(async (ws) => {
+          let boardsQuery = supabase
+            .from("boards")
+            .select("id, name, created_at")
+            .eq("workspace_id", ws.workspaces.id);
 
-      setWorkspaces(transformedWorkspaces);
+          // If user is not the workspace owner, only fetch boards they have access to
+          if (ws.workspaces.owner_id !== user.id) {
+            const { data: boardMembers } = await supabase
+              .from("board_members")
+              .select("board_id")
+              .eq("user_id", user.id);
+
+            const boardIds = boardMembers?.map(bm => bm.board_id) || [];
+            boardsQuery = boardsQuery.in("id", boardIds);
+          }
+
+          const { data: boards } = await boardsQuery;
+
+          return {
+            id: ws.workspaces.id,
+            name: ws.workspaces.name,
+            owner_id: ws.workspaces.owner_id,
+            role: ws.role,
+            boards: boards || []
+          };
+        })
+      );
+
+      setWorkspaces(workspacesWithBoards);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -84,13 +116,13 @@ const Index = () => {
 
   const createWorkspace = async () => {
     if (!newWorkspaceName.trim()) return;
-    setIsProcessing(true);
+    setIsCreating(true);
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not found");
+      if (!user) throw new Error("Not authenticated");
 
-      // First create the workspace
+      // Create workspace
       const { data: workspace, error: workspaceError } = await supabase
         .from("workspaces")
         .insert([
@@ -104,7 +136,7 @@ const Index = () => {
 
       if (workspaceError) throw workspaceError;
 
-      // Add the creator as a workspace member with owner role
+      // Add creator as workspace member with owner role
       const { error: memberError } = await supabase
         .from("workspace_members")
         .insert([
@@ -122,7 +154,7 @@ const Index = () => {
         description: "Workspace created successfully",
       });
 
-      setIsCreateOpen(false);
+      setIsDialogOpen(false);
       setNewWorkspaceName("");
       fetchWorkspaces();
     } catch (error: any) {
@@ -132,7 +164,7 @@ const Index = () => {
         variant: "destructive",
       });
     } finally {
-      setIsProcessing(false);
+      setIsCreating(false);
     }
   };
 
@@ -142,65 +174,69 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-workspace-50">
-      <main className="max-w-7xl mx-auto px-6 py-16">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-semibold">Your Workspaces</h1>
-          <Button onClick={() => setIsCreateOpen(true)}>
+      <nav className="glass-effect fixed top-0 w-full border-b border-workspace-200 px-6 py-4 z-50">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <h1 className="text-xl font-semibold text-workspace-800">
+            My Workspaces
+          </h1>
+          <Button onClick={() => setIsDialogOpen(true)} size="sm">
             <Plus className="w-4 h-4 mr-2" />
             New Workspace
           </Button>
         </div>
+      </nav>
 
-        {workspaces.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-workspace-500">No workspaces yet. Create your first one!</p>
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {workspaces.map((workspace) => (
-              <div
-                key={workspace.id}
-                className="bg-white rounded-lg shadow-sm border border-workspace-200 p-6 hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => navigate(`/workspaces/${workspace.id}`)}
-              >
-                <h2 className="text-lg font-medium mb-2">{workspace.name}</h2>
-                <p className="text-sm text-workspace-500 capitalize">Your role: {workspace.role}</p>
-              </div>
-            ))}
-          </div>
-        )}
+      <main className="max-w-7xl mx-auto pt-24 px-6 pb-16">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {workspaces.map((workspace) => (
+            <Card
+              key={workspace.id}
+              className="hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => navigate(`/workspaces/${workspace.id}`)}
+            >
+              <CardHeader>
+                <CardTitle>{workspace.name}</CardTitle>
+                <CardDescription>
+                  Role: {workspace.role}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-500">
+                  {workspace.boards.length} board{workspace.boards.length !== 1 ? "s" : ""}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </main>
 
-      {/* Create Workspace Dialog */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Workspace</DialogTitle>
             <DialogDescription>
-              Give your workspace a name to get started
+              Enter a name for your new workspace
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Workspace Name</Label>
               <Input
-                id="name"
                 value={newWorkspaceName}
                 onChange={(e) => setNewWorkspaceName(e.target.value)}
-                placeholder="Enter workspace name"
+                placeholder="Workspace name"
               />
             </div>
           </div>
           <div className="flex justify-end gap-3">
             <Button
               variant="outline"
-              onClick={() => setIsCreateOpen(false)}
-              disabled={isProcessing}
+              onClick={() => setIsDialogOpen(false)}
+              disabled={isCreating}
             >
               Cancel
             </Button>
-            <Button onClick={createWorkspace} disabled={isProcessing}>
-              {isProcessing ? "Creating..." : "Create Workspace"}
+            <Button onClick={createWorkspace} disabled={isCreating}>
+              {isCreating ? "Creating..." : "Create"}
             </Button>
           </div>
         </DialogContent>
