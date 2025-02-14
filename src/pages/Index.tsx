@@ -1,25 +1,53 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Plus, Settings, Users } from "lucide-react";
+import { Plus, Settings, Users, LogOut } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
+import { useToast } from "@/components/ui/use-toast";
 
 const Index = () => {
   const [workspaces, setWorkspaces] = useState([
     { id: 1, name: "Marketing Team", members: 5, boards: 3 },
     { id: 2, name: "Development Team", members: 8, boards: 6 },
   ]);
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      navigate("/auth");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-workspace-50">
       <nav className="glass-effect fixed top-0 w-full border-b border-workspace-200 px-6 py-4 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-semibold text-workspace-800">Workspaces</h1>
-          <Button variant="outline" size="sm" className="hover-lift">
-            <Settings className="w-4 h-4 mr-2" />
-            Settings
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="hover-lift">
+              <Settings className="w-4 h-4 mr-2" />
+              Settings
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="hover-lift"
+              onClick={handleSignOut}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign out
+            </Button>
+          </div>
         </div>
       </nav>
 
@@ -57,7 +85,11 @@ const Index = () => {
                   </div>
                 </div>
                 <div className="border-t border-workspace-200 p-4 bg-workspace-50 rounded-b-lg">
-                  <Button variant="secondary" size="sm" className="w-full hover-lift">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full hover-lift"
+                  >
                     View Workspace
                   </Button>
                 </div>
