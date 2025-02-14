@@ -20,10 +20,25 @@ const Auth = () => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
+        console.log("Session found, redirecting to home");
         navigate("/");
+      } else {
+        console.log("No session found");
       }
     };
     checkSession();
+
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Auth state changed:", event, session ? "Session exists" : "No session");
+      if (session) {
+        navigate("/");
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [navigate]);
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -116,6 +131,7 @@ const Auth = () => {
         }
       } else {
         // Regular sign in
+        console.log("Attempting to sign in with:", { email: normalizedEmail });
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email: normalizedEmail,
           password,
@@ -130,6 +146,7 @@ const Auth = () => {
         }
 
         if (data?.session) {
+          console.log("Sign in successful, session created");
           toast({
             title: "Success",
             description: "Signed in successfully",
