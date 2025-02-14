@@ -89,7 +89,17 @@ const Index = () => {
         .eq("invited_email", user.email);
 
       if (error) throw error;
-      setInvitations(data || []);
+      
+      // Transform the data to match our Invitation interface
+      const transformedInvitations: Invitation[] = (data || []).map(item => ({
+        id: item.id,
+        workspace_id: item.workspace_id,
+        workspace: {
+          name: item.workspaces.name
+        }
+      }));
+
+      setInvitations(transformedInvitations);
     } catch (error) {
       console.error("Error fetching invitations:", error);
     }
