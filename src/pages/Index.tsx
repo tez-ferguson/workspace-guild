@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +35,7 @@ interface Workspace {
 interface Invitation {
   id: string;
   workspace_id: string;
+  status: 'pending' | 'accepted' | 'rejected';
   workspace: {
     name: string;
   };
@@ -84,12 +84,14 @@ const Index = () => {
         .select(`
           id,
           workspace_id,
+          status,
           workspace:workspaces (
             name
           )
         `)
         .eq("invited_email", user.email)
-        .order('created_at', { ascending: false }); // Get newest invitations first
+        .eq("status", "pending")
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error("Supabase error:", error);
@@ -98,10 +100,10 @@ const Index = () => {
 
       console.log("Raw invitations data:", data);
 
-      // Transform the data to match our Invitation interface
       const transformedInvitations: Invitation[] = (data || []).map(item => ({
         id: item.id,
         workspace_id: item.workspace_id,
+        status: item.status,
         workspace: {
           name: item.workspace.name
         }
@@ -127,7 +129,15 @@ const Index = () => {
         return;
       }
 
-      // Add user to workspace_members
+      // First update the invitation status
+      const { error: updateError } = await supabase
+        .from("workspace_invitations")
+        .update({ status: "accepted" })
+        .eq("id", invitationId);
+
+      if (updateError) throw updateError;
+
+      // Then add user to workspace_members
       const { error: memberError } = await supabase
         .from("workspace_members")
         .insert([{
@@ -138,22 +148,38 @@ const Index = () => {
 
       if (memberError) throw memberError;
 
-      // Delete the invitation
-      const { error: deleteError } = await supabase
-        .from("workspace_invitations")
-        .delete()
-        .eq("id", invitationId);
-
-      if (deleteError) throw deleteError;
-
       toast({
         title: "Success",
         description: "You have joined the workspace",
       });
 
-      // First update invitations, then workspaces
+      // Refresh the lists
       await fetchInvitations();
       await fetchWorkspaces();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const declineInvitation = async (invitationId: string) => {
+    try {
+      const { error } = await supabase
+        .from("workspace_invitations")
+        .update({ status: "rejected" })
+        .eq("id", invitationId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Invitation declined",
+      });
+
+      await fetchInvitations();
     } catch (error: any) {
       toast({
         title: "Error",
@@ -319,12 +345,21 @@ const Index = () => {
                     <CardDescription>You've been invited to join this workspace</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button 
-                      onClick={() => acceptInvitation(invitation.id, invitation.workspace_id)}
-                      className="w-full"
-                    >
-                      Accept Invitation
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={() => acceptInvitation(invitation.id, invitation.workspace_id)}
+                        className="flex-1"
+                      >
+                        Accept
+                      </Button>
+                      <Button 
+                        onClick={() => declineInvitation(invitation.id)}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        Decline
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -399,4 +434,3 @@ const Index = () => {
 };
 
 export default Index;
-

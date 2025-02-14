@@ -138,6 +138,7 @@ export type Database = {
           invited_by: string
           invited_email: string
           role: string
+          status: string
           workspace_id: string
         }
         Insert: {
@@ -146,6 +147,7 @@ export type Database = {
           invited_by: string
           invited_email: string
           role?: string
+          status?: string
           workspace_id: string
         }
         Update: {
@@ -154,6 +156,7 @@ export type Database = {
           invited_by?: string
           invited_email?: string
           role?: string
+          status?: string
           workspace_id?: string
         }
         Relationships: [
