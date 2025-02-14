@@ -1,3 +1,4 @@
+
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -15,47 +16,72 @@ serve(async (req) => {
   }
 
   try {
+    // Initialize Supabase client with service role key
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
     const { email, workspaceId, invitedBy } = await req.json()
-    console.log('Request payload:', { email, workspaceId, invitedBy })
+    console.log('Processing invitation:', { email, workspaceId, invitedBy })
 
-    // Log environment variables (without sensitive values)
-    console.log('Environment check:', {
-      hasSupabaseUrl: !!Deno.env.get('SUPABASE_URL'),
-      hasServiceRoleKey: !!Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    })
+    // First check if there's an existing invitation
+    const { data: existingInvite, error: inviteCheckError } = await supabaseClient
+      .from('workspace_invitations')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('invited_email', email)
+      .eq('status', 'pending')
+      .maybeSingle()
 
-    // Check if user already exists
-    const { data: existingUser, error: userError } = await supabaseClient.auth.admin.getUserByEmail(email)
-    console.log('User lookup result:', { exists: !!existingUser, error: userError?.message })
-
-    let userId: string
-
-    if (!existingUser) {
-      console.log('Creating new user')
-      // Create new user if they don't exist
-      const { data: newUser, error: createError } = await supabaseClient.auth.admin.createUser({
-        email,
-        email_confirm: true,
-      })
-
-      if (createError) {
-        console.error('Error creating user:', createError)
-        throw createError
-      }
-      userId = newUser.user.id
-      console.log('New user created:', userId)
-    } else {
-      userId = existingUser.user.id
-      console.log('Using existing user:', userId)
+    if (inviteCheckError) {
+      console.error('Error checking existing invitation:', inviteCheckError)
+      throw inviteCheckError
     }
 
-    console.log('Creating workspace invitation')
+    if (existingInvite) {
+      console.log('Found existing pending invitation')
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'An invitation for this email is already pending' 
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        }
+      )
+    }
+
+    // Check if user is already a member
+    const { data: existingMember, error: memberCheckError } = await supabaseClient
+      .from('workspace_members')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', invitedBy)
+      .maybeSingle()
+
+    if (memberCheckError) {
+      console.error('Error checking existing membership:', memberCheckError)
+      throw memberCheckError
+    }
+
+    if (existingMember) {
+      console.log('User is already a member')
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'User is already a member of this workspace' 
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        }
+      )
+    }
+
     // Create workspace invitation
+    console.log('Creating workspace invitation')
     const { data: invitation, error: inviteError } = await supabaseClient
       .from('workspace_invitations')
       .insert({
@@ -80,16 +106,16 @@ serve(async (req) => {
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
-      },
+      }
     )
   } catch (error) {
     console.error('Error in invite-user function:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ success: false, error: error.message }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
-      },
+      }
     )
   }
 })
