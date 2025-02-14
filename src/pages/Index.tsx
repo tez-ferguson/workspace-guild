@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,7 +65,7 @@ const Index = () => {
         return;
       }
       await fetchWorkspaces();
-      await fetchInvitations(); // Fetch invitations after workspaces
+      await fetchInvitations();
     } catch (error) {
       console.error("Session error:", error);
       navigate("/auth");
@@ -93,8 +92,7 @@ const Index = () => {
           )
         `)
         .eq("invited_email", user.email)
-        .eq("status", "pending")
-        .order('created_at', { ascending: false });
+        .eq("status", "pending");
 
       if (error) {
         console.error("Supabase error:", error);
