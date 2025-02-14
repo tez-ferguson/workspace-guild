@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus } from "lucide-react";
+import { Plus, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,6 +45,29 @@ const Index = () => {
   useEffect(() => {
     fetchWorkspaces();
   }, []);
+
+  const handleSignOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      // Even if there's an error, we want to clear the local session
+      if (error) {
+        console.error("Error signing out:", error);
+        // If it's a session not found error, we can ignore it
+        if (error.message.includes("session_not_found")) {
+          navigate("/auth");
+          return;
+        }
+        throw error;
+      }
+      navigate("/auth");
+    } catch (error: any) {
+      toast({
+        title: "Error signing out",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   const fetchWorkspaces = async () => {
     try {
@@ -90,18 +113,19 @@ const Index = () => {
             };
           }
 
-          // If user is a member, fetch only boards they have access to
+          // If user is a member, get their accessible boards
+          const { data: boardMembers } = await supabase
+            .from("board_members")
+            .select("board_id")
+            .eq("user_id", user.id);
+
+          const boardIds = (boardMembers || []).map(bm => bm.board_id);
+
           const { data: memberBoards } = await supabase
             .from("boards")
             .select("id, name, created_at")
             .eq("workspace_id", ws.workspace_id)
-            .in(
-              "id",
-              supabase
-                .from("board_members")
-                .select("board_id")
-                .eq("user_id", user.id)
-            );
+            .in("id", boardIds.length ? boardIds : ['']);
 
           return {
             id: ws.workspaces.id,
@@ -191,10 +215,16 @@ const Index = () => {
           <h1 className="text-xl font-semibold text-workspace-800">
             My Workspaces
           </h1>
-          <Button onClick={() => setIsDialogOpen(true)} size="sm">
-            <Plus className="w-4 h-4 mr-2" />
-            New Workspace
-          </Button>
+          <div className="flex items-center gap-4">
+            <Button onClick={handleSignOut} size="sm" variant="outline">
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
+            <Button onClick={() => setIsDialogOpen(true)} size="sm">
+              <Plus className="w-4 h-4 mr-2" />
+              New Workspace
+            </Button>
+          </div>
         </div>
       </nav>
 
