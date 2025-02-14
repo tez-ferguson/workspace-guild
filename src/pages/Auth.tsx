@@ -41,6 +41,8 @@ const Auth = () => {
         return;
       }
 
+      const normalizedEmail = email.trim().toLowerCase();
+
       if (isSignUp) {
         if (!name) {
           toast({
@@ -51,9 +53,27 @@ const Auth = () => {
           return;
         }
 
+        // Check if user already exists in our users table
+        const { data: existingUser } = await supabase
+          .from("users")
+          .select("id")
+          .eq("email", normalizedEmail)
+          .maybeSingle();
+
+        if (existingUser) {
+          toast({
+            title: "Error",
+            description: "This email is already registered. Please sign in instead.",
+            variant: "destructive",
+          });
+          setIsSignUp(false);
+          setPassword("");
+          return;
+        }
+
         // First, try to sign up the user
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
-          email: email.trim().toLowerCase(),
+          email: normalizedEmail,
           password,
           options: {
             data: {
@@ -70,26 +90,34 @@ const Auth = () => {
         }
 
         if (authData.user) {
-          // Create the new user profile
-          const { error: insertError } = await supabase
-            .from("users")
-            .insert([{ id: authData.user.id, email: email.trim().toLowerCase(), name }]);
+          try {
+            const { error: insertError } = await supabase
+              .from("users")
+              .insert([{ id: authData.user.id, email: normalizedEmail, name }]);
 
-          if (insertError) throw insertError;
+            if (insertError) {
+              console.error("Error creating user profile:", insertError);
+              // If we fail to create the profile, we should clean up the auth user
+              await supabase.auth.signOut();
+              throw new Error("Failed to create user profile. Please try again.");
+            }
 
-          toast({
-            title: "Success",
-            description: "Account created successfully. Please check your email for verification.",
-          });
+            toast({
+              title: "Success",
+              description: "Account created successfully. Please check your email for verification.",
+            });
 
-          // Switch to sign in mode
-          setIsSignUp(false);
-          setPassword("");
+            // Switch to sign in mode
+            setIsSignUp(false);
+            setPassword("");
+          } catch (error) {
+            throw error;
+          }
         }
       } else {
         // Regular sign in
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email: email.trim().toLowerCase(),
+          email: normalizedEmail,
           password,
         });
 
@@ -161,7 +189,7 @@ const Auth = () => {
               id="email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value.trim().toLowerCase())}
+              onChange={(e) => setEmail(e.target.value)}
               required
               disabled={isLoading}
               placeholder="your@email.com"
