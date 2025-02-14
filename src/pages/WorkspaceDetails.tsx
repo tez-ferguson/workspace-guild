@@ -144,29 +144,36 @@ const WorkspaceDetails = () => {
     setIsProcessing(true);
 
     try {
-      // Step 1: Get user_id from email - use eq and single() for exact match
+      // Step 1: Get user_id from email using maybeSingle() to handle no results
       const { data: userData, error: userError } = await supabase
         .from("users")
         .select("id, email")
         .eq("email", newMemberEmail.trim())
-        .single();
+        .maybeSingle();
 
-      if (userError || !userData) {
+      if (userError) {
+        console.error("Error fetching user:", userError);
+        throw new Error("Error looking up user. Please try again.");
+      }
+
+      if (!userData) {
+        console.error("User not found:", newMemberEmail.trim());
         throw new Error("User not found. Please ensure the email is correct and the user has signed up.");
       }
 
       console.log("Found user:", userData);
 
-      // Step 2: Check if user is already a member
+      // Step 2: Check if user is already a member using maybeSingle()
       const { data: existingMember, error: existingError } = await supabase
         .from("workspace_members")
         .select("id")
         .eq("workspace_id", id)
         .eq("user_id", userData.id)
-        .single();
+        .maybeSingle();
 
-      if (existingError && existingError.code !== 'PGRST116') {
-        throw existingError;
+      if (existingError) {
+        console.error("Error checking existing member:", existingError);
+        throw new Error("Error checking membership. Please try again.");
       }
 
       if (existingMember) {
@@ -190,7 +197,7 @@ const WorkspaceDetails = () => {
 
       if (memberError) {
         console.error("Error adding workspace member:", memberError);
-        throw memberError;
+        throw new Error("Failed to add member to workspace. Please try again.");
       }
 
       console.log("Added workspace member:", newMember);
@@ -202,17 +209,16 @@ const WorkspaceDetails = () => {
           user_id: userData.id
         }));
 
-        const { data: newBoardMembers, error: boardMemberError } = await supabase
+        const { error: boardMemberError } = await supabase
           .from("board_members")
-          .insert(boardMembers)
-          .select();
+          .insert(boardMembers);
 
         if (boardMemberError) {
           console.error("Error adding board members:", boardMemberError);
-          throw boardMemberError;
+          throw new Error("Failed to add board access. Please try again.");
         }
 
-        console.log("Added board members:", newBoardMembers);
+        console.log("Added board access for member");
       }
 
       toast({
@@ -223,7 +229,7 @@ const WorkspaceDetails = () => {
       setIsInviteOpen(false);
       setNewMemberEmail("");
       setSelectedBoards([]);
-      await fetchWorkspaceDetails(); // Add await here
+      await fetchWorkspaceDetails();
     } catch (error: any) {
       console.error("Error adding member:", error);
       toast({
