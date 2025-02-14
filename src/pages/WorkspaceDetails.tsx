@@ -28,6 +28,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Member {
   id: string;
@@ -53,6 +54,7 @@ interface Workspace {
 }
 
 const WorkspaceDetails = () => {
+  const isMobile = useIsMobile();
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -530,18 +532,18 @@ const WorkspaceDetails = () => {
   };
 
   if (isLoading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    return <div className="flex items-center justify-center min-h-screen p-4">Loading...</div>;
   }
 
   if (!workspace) {
-    return <div className="flex items-center justify-center min-h-screen">Workspace not found</div>;
+    return <div className="flex items-center justify-center min-h-screen p-4">Workspace not found</div>;
   }
 
   return (
     <div className="min-h-screen bg-workspace-50">
-      <nav className="glass-effect fixed top-0 w-full border-b border-workspace-200 px-6 py-4 z-50">
+      <nav className="glass-effect fixed top-0 w-full border-b border-workspace-200 px-4 sm:px-6 py-4 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <Button
               variant="ghost"
               size="sm"
@@ -549,9 +551,9 @@ const WorkspaceDetails = () => {
               className="hover-lift"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
+              {!isMobile && "Back"}
             </Button>
-            <h1 className="text-xl font-semibold text-workspace-800">
+            <h1 className="text-lg sm:text-xl font-semibold text-workspace-800 truncate">
               {workspace.name}
             </h1>
           </div>
@@ -563,108 +565,117 @@ const WorkspaceDetails = () => {
                 onClick={() => setIsConfirmLeaveOpen(true)}
                 className="text-destructive hover:bg-destructive/10"
               >
-                Leave Workspace
+                {isMobile ? "Leave" : "Leave Workspace"}
               </Button>
             )}
             {isOwner && (
               <Button variant="outline" size="sm" className="hover-lift">
                 <Settings className="w-4 h-4 mr-2" />
-                Settings
+                {!isMobile && "Settings"}
               </Button>
             )}
           </div>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto pt-24 px-6 pb-16">
-        <div className="grid gap-8">
-          <section>
+      <main className="max-w-7xl mx-auto pt-24 px-4 sm:px-6 pb-16">
+        <div className="grid gap-6 sm:gap-8">
+          <section className="overflow-x-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Members</h2>
+              <h2 className="text-lg sm:text-xl font-semibold">Members</h2>
               {isOwner && (
                 <Button onClick={() => setIsInviteOpen(true)}>
                   <UserPlus className="w-4 h-4 mr-2" />
-                  Add Member
+                  {!isMobile && "Add Member"}
                 </Button>
               )}
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  {isOwner && <TableHead className="w-32">Actions</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {members.map((member) => (
-                  <TableRow key={member.id}>
-                    <TableCell>{member.user.name}</TableCell>
-                    <TableCell>{member.user.email}</TableCell>
-                    <TableCell className="capitalize">{member.role}</TableCell>
-                    {isOwner && member.user.id !== workspace.owner_id && (
+            <div className="overflow-x-auto rounded-lg border border-workspace-200 bg-white">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead className="hidden sm:table-cell">Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    {isOwner && <TableHead className="w-24 sm:w-32">Actions</TableHead>}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {members.map((member) => (
+                    <TableRow key={member.id}>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => toggleMemberRole(member.id, member.role)}
-                                >
-                                  {member.role === "member" ? (
-                                    <Plus className="w-4 h-4 text-green-600" />
-                                  ) : (
-                                    <Minus className="w-4 h-4 text-orange-600" />
-                                  )}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {member.role === "member" ? "Promote to Owner" : "Demote to Member"}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openManageBoards(member)}
-                          >
-                            <Settings className="w-4 h-4 text-blue-600" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeMember(member.id)}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
+                        <div className="flex flex-col sm:flex-row sm:items-center">
+                          <span>{member.user.name}</span>
+                          <span className="text-sm text-workspace-500 sm:hidden">{member.user.email}</span>
                         </div>
                       </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      <TableCell className="hidden sm:table-cell">{member.user.email}</TableCell>
+                      <TableCell className="capitalize">{member.role}</TableCell>
+                      {isOwner && member.user.id !== workspace.owner_id && (
+                        <TableCell>
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => toggleMemberRole(member.id, member.role)}
+                                  >
+                                    {member.role === "member" ? (
+                                      <Plus className="w-4 h-4 text-green-600" />
+                                    ) : (
+                                      <Minus className="w-4 h-4 text-orange-600" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {member.role === "member" ? "Promote to Owner" : "Demote to Member"}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openManageBoards(member)}
+                            >
+                              <Settings className="w-4 h-4 text-blue-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeMember(member.id)}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </section>
 
           <section>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Boards</h2>
+              <h2 className="text-lg sm:text-xl font-semibold">Boards</h2>
               {isOwner && (
                 <Button onClick={() => setIsNewBoardOpen(true)}>
                   <Plus className="w-4 h-4 mr-2" />
-                  New Board
+                  {!isMobile && "New Board"}
                 </Button>
               )}
             </div>
             {boards.length === 0 ? (
-              <p className="text-center py-8 text-workspace-500">
-                No boards created yet.
-              </p>
+              <div className="bg-white rounded-lg border border-workspace-200 p-8 text-center">
+                <p className="text-workspace-500">
+                  No boards created yet.
+                </p>
+              </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {boards.map((board) => (
                   <div
                     key={board.id}
@@ -673,7 +684,7 @@ const WorkspaceDetails = () => {
                     role="button"
                   >
                     <div className="flex items-center justify-between">
-                      <h3 className="font-medium">{board.name}</h3>
+                      <h3 className="font-medium truncate mr-2">{board.name}</h3>
                       {isOwner && (
                         <Button
                           variant="ghost"
@@ -692,150 +703,44 @@ const WorkspaceDetails = () => {
               </div>
             )}
           </section>
+        </div>
+      </main>
 
-          {/* Add Member Dialog with Board Selection */}
-          <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add New Member</DialogTitle>
-                <DialogDescription>
-                  Enter the email address and select boards to grant access
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={newMemberEmail}
-                    onChange={(e) => setNewMemberEmail(e.target.value)}
-                    placeholder="member@example.com"
-                  />
-                </div>
-                {boards.length > 0 && (
-                  <div className="space-y-2">
-                    <Label>Grant Access to Boards</Label>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {boards.map((board) => (
-                        <div key={board.id} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`board-${board.id}`}
-                            checked={selectedBoards.includes(board.id)}
-                            onCheckedChange={(checked) => {
-                              setSelectedBoards(prev =>
-                                checked
-                                  ? [...prev, board.id]
-                                  : prev.filter(id => id !== board.id)
-                              );
-                            }}
-                          />
-                          <Label htmlFor={`board-${board.id}`}>{board.name}</Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex justify-end gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsInviteOpen(false);
-                    setSelectedBoards([]);
-                  }}
-                  disabled={isProcessing}
-                >
-                  Cancel
-                </Button>
-                <Button onClick={inviteMember} disabled={isProcessing}>
-                  {isProcessing ? "Adding..." : "Add Member"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* New Board Dialog */}
-          <Dialog open={isNewBoardOpen} onOpenChange={setIsNewBoardOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Board</DialogTitle>
-                <DialogDescription>
-                  Give your board a name to get started
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="boardName">Board Name</Label>
-                  <Input
-                    id="boardName"
-                    value={newBoardName}
-                    onChange={(e) => setNewBoardName(e.target.value)}
-                    placeholder="Enter board name"
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsNewBoardOpen(false)}
-                  disabled={isProcessing}
-                >
-                  Cancel
-                </Button>
-                <Button onClick={createBoard} disabled={isProcessing}>
-                  {isProcessing ? "Creating..." : "Create Board"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Confirm Leave Dialog */}
-          <Dialog open={isConfirmLeaveOpen} onOpenChange={setIsConfirmLeaveOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Leave Workspace</DialogTitle>
-                <DialogDescription>
-                  Are you sure you want to leave this workspace? You will lose access to all boards and won't be able to rejoin unless invited again.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex justify-end gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsConfirmLeaveOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={leaveWorkspace}
-                >
-                  Leave Workspace
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Manage Board Permissions Dialog */}
-          <Dialog open={isManageBoardsOpen} onOpenChange={setIsManageBoardsOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Manage Board Access</DialogTitle>
-                <DialogDescription>
-                  Select which boards {selectedMember?.user.name} can access
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-4">
+      {/* Add Member Dialog with Board Selection */}
+      <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Member</DialogTitle>
+            <DialogDescription>
+              Enter the email address and select boards to grant access
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address</Label>
+              <Input
+                id="email"
+                type="email"
+                value={newMemberEmail}
+                onChange={(e) => setNewMemberEmail(e.target.value)}
+                placeholder="member@example.com"
+              />
+            </div>
+            {boards.length > 0 && (
+              <div className="space-y-2">
+                <Label>Grant Access to Boards</Label>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {boards.map((board) => (
                     <div key={board.id} className="flex items-center space-x-2">
                       <Checkbox
                         id={`board-${board.id}`}
-                        checked={memberBoardPermissions[selectedMember?.user.id || ""]?.includes(board.id)}
+                        checked={selectedBoards.includes(board.id)}
                         onCheckedChange={(checked) => {
-                          if (selectedMember) {
-                            updateBoardPermissions(selectedMember.id, board.id, !!checked);
-                          }
+                          setSelectedBoards(prev =>
+                            checked
+                              ? [...prev, board.id]
+                              : prev.filter(id => id !== board.id)
+                          );
                         }}
                       />
                       <Label htmlFor={`board-${board.id}`}>{board.name}</Label>
@@ -843,10 +748,116 @@ const WorkspaceDetails = () => {
                   ))}
                 </div>
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </main>
+            )}
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsInviteOpen(false);
+                setSelectedBoards([]);
+              }}
+              disabled={isProcessing}
+            >
+              Cancel
+            </Button>
+            <Button onClick={inviteMember} disabled={isProcessing}>
+              {isProcessing ? "Adding..." : "Add Member"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Board Dialog */}
+      <Dialog open={isNewBoardOpen} onOpenChange={setIsNewBoardOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Board</DialogTitle>
+            <DialogDescription>
+              Give your board a name to get started
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="boardName">Board Name</Label>
+              <Input
+                id="boardName"
+                value={newBoardName}
+                onChange={(e) => setNewBoardName(e.target.value)}
+                placeholder="Enter board name"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setIsNewBoardOpen(false)}
+              disabled={isProcessing}
+            >
+              Cancel
+            </Button>
+            <Button onClick={createBoard} disabled={isProcessing}>
+              {isProcessing ? "Creating..." : "Create Board"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Leave Dialog */}
+      <Dialog open={isConfirmLeaveOpen} onOpenChange={setIsConfirmLeaveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Leave Workspace</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to leave this workspace? You will lose access to all boards and won't be able to rejoin unless invited again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setIsConfirmLeaveOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={leaveWorkspace}
+            >
+              Leave Workspace
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Board Permissions Dialog */}
+      <Dialog open={isManageBoardsOpen} onOpenChange={setIsManageBoardsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage Board Access</DialogTitle>
+            <DialogDescription>
+              Select which boards {selectedMember?.user.name} can access
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-4">
+              {boards.map((board) => (
+                <div key={board.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`board-${board.id}`}
+                    checked={memberBoardPermissions[selectedMember?.user.id || ""]?.includes(board.id)}
+                    onCheckedChange={(checked) => {
+                      if (selectedMember) {
+                        updateBoardPermissions(selectedMember.id, board.id, !!checked);
+                      }
+                    }}
+                  />
+                  <Label htmlFor={`board-${board.id}`}>{board.name}</Label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
