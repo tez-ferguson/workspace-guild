@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { InviteMemberDialog } from "@/components/InviteMemberDialog";
 
 interface Workspace {
   id: string;
@@ -113,7 +115,6 @@ const Index = () => {
           id,
           workspace_id,
           status,
-          invited_email,
           workspace:workspaces (
             name
           )
@@ -122,20 +123,24 @@ const Index = () => {
         .eq("status", "pending");
 
       if (error) {
-        setError(`Database error: ${error.message}`);
-        console.error("Supabase error:", error);
+        console.error("Error fetching invitations:", error);
         throw error;
       }
 
       console.log("Raw invitations data:", data);
-      console.log("Query parameters:", { email: session.user.email, status: 'pending' });
 
-      const transformedInvitations: Invitation[] = (data || []).map(item => ({
+      if (!data || data.length === 0) {
+        console.log("No pending invitations found");
+        setInvitations([]);
+        return;
+      }
+
+      const transformedInvitations: Invitation[] = data.map(item => ({
         id: item.id,
         workspace_id: item.workspace_id,
         status: item.status as InvitationStatus,
         workspace: {
-          name: item.workspace.name
+          name: item.workspace?.name || 'Unknown Workspace'
         }
       }));
 
@@ -161,12 +166,17 @@ const Index = () => {
         return;
       }
 
+      console.log("Accepting invitation:", { invitationId, workspaceId, userId: user.id });
+
       const { error: updateError } = await supabase
         .from("workspace_invitations")
-        .update({ status: "accepted" as InvitationStatus })
+        .update({ status: "accepted" })
         .eq("id", invitationId);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("Error updating invitation:", updateError);
+        throw updateError;
+      }
 
       const { error: memberError } = await supabase
         .from("workspace_members")
@@ -176,16 +186,19 @@ const Index = () => {
           role: "member"
         }]);
 
-      if (memberError) throw memberError;
+      if (memberError) {
+        console.error("Error creating workspace member:", memberError);
+        throw memberError;
+      }
 
       toast({
         title: "Success",
         description: "You have joined the workspace",
       });
 
-      await fetchInvitations();
-      await fetchWorkspaces();
+      await Promise.all([fetchInvitations(), fetchWorkspaces()]);
     } catch (error: any) {
+      console.error("Error accepting invitation:", error);
       toast({
         title: "Error",
         description: error.message,
@@ -196,12 +209,17 @@ const Index = () => {
 
   const declineInvitation = async (invitationId: string) => {
     try {
+      console.log("Declining invitation:", invitationId);
+
       const { error } = await supabase
         .from("workspace_invitations")
-        .update({ status: "rejected" as InvitationStatus })
+        .update({ status: "rejected" })
         .eq("id", invitationId);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error declining invitation:", error);
+        throw error;
+      }
 
       toast({
         title: "Success",
@@ -210,6 +228,7 @@ const Index = () => {
 
       await fetchInvitations();
     } catch (error: any) {
+      console.error("Error declining invitation:", error);
       toast({
         title: "Error",
         description: error.message,
@@ -359,24 +378,6 @@ const Index = () => {
       </nav>
 
       <main className="max-w-7xl mx-auto pt-24 px-6 pb-16">
-        {/* Debug Information */}
-        <div className="mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Debug Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <pre className="text-sm bg-gray-50 p-4 rounded">
-                {JSON.stringify({
-                  invitationsCount: invitations.length,
-                  error: error,
-                  currentUserEmail: supabase.auth.getSession().then(({data}) => data.session?.user?.email),
-                }, null, 2)}
-              </pre>
-            </CardContent>
-          </Card>
-        </div>
-
         {error && (
           <Alert variant="destructive" className="mb-8">
             <AlertDescription>{error}</AlertDescription>
