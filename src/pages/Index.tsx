@@ -33,10 +33,19 @@ interface Workspace {
   }[];
 }
 
+interface Invitation {
+  id: string;
+  workspace_id: string;
+  workspace: {
+    name: string;
+  };
+}
+
 const Index = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
@@ -53,10 +62,82 @@ const Index = () => {
         navigate("/auth");
         return;
       }
-      fetchWorkspaces();
+      await Promise.all([
+        fetchWorkspaces(),
+        fetchInvitations(),
+      ]);
     } catch (error) {
       console.error("Session error:", error);
       navigate("/auth");
+    }
+  };
+
+  const fetchInvitations = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("workspace_invitations")
+        .select(`
+          id,
+          workspace_id,
+          workspaces (
+            name
+          )
+        `)
+        .eq("invited_email", user.email);
+
+      if (error) throw error;
+      setInvitations(data || []);
+    } catch (error) {
+      console.error("Error fetching invitations:", error);
+    }
+  };
+
+  const acceptInvitation = async (invitationId: string, workspaceId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate("/auth");
+        return;
+      }
+
+      // Add user to workspace_members
+      const { error: memberError } = await supabase
+        .from("workspace_members")
+        .insert([{
+          workspace_id: workspaceId,
+          user_id: user.id,
+          role: "member"
+        }]);
+
+      if (memberError) throw memberError;
+
+      // Delete the invitation
+      const { error: deleteError } = await supabase
+        .from("workspace_invitations")
+        .delete()
+        .eq("id", invitationId);
+
+      if (deleteError) throw deleteError;
+
+      toast({
+        title: "Success",
+        description: "You have joined the workspace",
+      });
+
+      // Refresh workspaces and invitations
+      await Promise.all([
+        fetchWorkspaces(),
+        fetchInvitations(),
+      ]);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -66,82 +147,49 @@ const Index = () => {
       navigate("/auth");
     } catch (error: any) {
       console.error("Error signing out:", error);
-      // If there's an error but it's just that the session wasn't found,
-      // we still want to redirect to auth
       navigate("/auth");
     }
   };
 
   const fetchWorkspaces = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
         navigate("/auth");
         return;
       }
 
       // Fetch workspaces where user is either owner or member
-      const { data: workspacesData, error: workspacesError } = await supabase
+      const { data: workspaceMembers, error: memberError } = await supabase
         .from("workspace_members")
         .select(`
-          workspace_id,
           role,
-          workspaces (
+          workspace: workspaces (
             id,
             name,
-            owner_id
+            owner_id,
+            boards (
+              id,
+              name,
+              created_at
+            )
           )
         `)
-        .eq("user_id", session.user.id);
+        .eq("user_id", user.id);
 
-      if (workspacesError) throw workspacesError;
+      if (memberError) throw memberError;
 
-      // For each workspace, fetch only the boards the user has access to
-      const workspacesWithBoards = await Promise.all(
-        workspacesData.map(async (ws) => {
-          // If user is the workspace owner, fetch all boards
-          if (ws.workspaces.owner_id === session.user.id) {
-            const { data: boards } = await supabase
-              .from("boards")
-              .select("id, name, created_at")
-              .eq("workspace_id", ws.workspace_id);
-            
-            return {
-              id: ws.workspaces.id,
-              name: ws.workspaces.name,
-              owner_id: ws.workspaces.owner_id,
-              role: ws.role,
-              boards: boards || []
-            };
-          }
+      // Transform the data to match our Workspace interface
+      const transformedWorkspaces = workspaceMembers?.map(member => ({
+        id: member.workspace.id,
+        name: member.workspace.name,
+        owner_id: member.workspace.owner_id,
+        role: member.role,
+        boards: member.workspace.boards || []
+      })) || [];
 
-          // If user is a member, get their accessible boards
-          const { data: boardMembers } = await supabase
-            .from("board_members")
-            .select("board_id")
-            .eq("user_id", session.user.id);
-
-          const boardIds = (boardMembers || []).map(bm => bm.board_id);
-
-          const { data: memberBoards } = await supabase
-            .from("boards")
-            .select("id, name, created_at")
-            .eq("workspace_id", ws.workspace_id)
-            .in("id", boardIds.length ? boardIds : ['']);
-
-          return {
-            id: ws.workspaces.id,
-            name: ws.workspaces.name,
-            owner_id: ws.workspaces.owner_id,
-            role: ws.role,
-            boards: memberBoards || []
-          };
-        })
-      );
-
-      setWorkspaces(workspacesWithBoards);
+      setWorkspaces(transformedWorkspaces);
     } catch (error: any) {
-      console.error("Error fetching workspaces:", error);
       toast({
         title: "Error",
         description: error.message,
@@ -157,8 +205,8 @@ const Index = () => {
     setIsCreating(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
         navigate("/auth");
         return;
       }
@@ -169,7 +217,7 @@ const Index = () => {
         .insert([
           {
             name: newWorkspaceName.trim(),
-            owner_id: session.user.id,
+            owner_id: user.id,
           },
         ])
         .select()
@@ -183,7 +231,7 @@ const Index = () => {
         .insert([
           {
             workspace_id: workspace.id,
-            user_id: session.user.id,
+            user_id: user.id,
             role: "owner",
           },
         ]);
@@ -234,6 +282,30 @@ const Index = () => {
       </nav>
 
       <main className="max-w-7xl mx-auto pt-24 px-6 pb-16">
+        {invitations.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-lg font-semibold mb-4">Pending Invitations</h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {invitations.map((invitation) => (
+                <Card key={invitation.id}>
+                  <CardHeader>
+                    <CardTitle>{invitation.workspace.name}</CardTitle>
+                    <CardDescription>You've been invited to join this workspace</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button 
+                      onClick={() => acceptInvitation(invitation.id, invitation.workspace_id)}
+                      className="w-full"
+                    >
+                      Accept Invitation
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
+
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {workspaces.map((workspace) => (
             <Card
@@ -255,6 +327,14 @@ const Index = () => {
             </Card>
           ))}
         </div>
+
+        {workspaces.length === 0 && invitations.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-workspace-500">
+              You don't have any workspaces yet. Create one or wait for an invitation.
+            </p>
+          </div>
+        )}
       </main>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
