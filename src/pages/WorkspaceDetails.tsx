@@ -144,31 +144,53 @@ const WorkspaceDetails = () => {
     setIsProcessing(true);
 
     try {
-      // Step 1: Get user_id from email using maybeSingle() to handle no results
-      const { data: userData, error: userError } = await supabase
+      const email = newMemberEmail.trim();
+      let userId;
+
+      // Step 1: Check if user exists in users table
+      const { data: existingUser, error: userError } = await supabase
         .from("users")
-        .select("id, email")
-        .eq("email", newMemberEmail.trim())
+        .select("id")
+        .eq("email", email)
         .maybeSingle();
 
       if (userError) {
-        console.error("Error fetching user:", userError);
-        throw new Error("Error looking up user. Please try again.");
+        console.error("Error checking existing user:", userError);
+        throw new Error("Error checking user existence. Please try again.");
       }
 
-      if (!userData) {
-        console.error("User not found:", newMemberEmail.trim());
-        throw new Error("User not found. Please ensure the email is correct and the user has signed up.");
+      if (existingUser) {
+        userId = existingUser.id;
+        console.log("Found existing user:", userId);
+      } else {
+        // Create new user if they don't exist
+        console.log("Creating new user with email:", email);
+        const { data: newUser, error: createError } = await supabase
+          .from("users")
+          .insert([
+            {
+              email: email,
+              name: email.split('@')[0], // Use part before @ as temporary name
+            },
+          ])
+          .select()
+          .single();
+
+        if (createError) {
+          console.error("Error creating user:", createError);
+          throw new Error("Failed to create new user. Please try again.");
+        }
+
+        userId = newUser.id;
+        console.log("Created new user:", userId);
       }
 
-      console.log("Found user:", userData);
-
-      // Step 2: Check if user is already a member using maybeSingle()
+      // Step 2: Check if user is already a workspace member
       const { data: existingMember, error: existingError } = await supabase
         .from("workspace_members")
         .select("id")
         .eq("workspace_id", id)
-        .eq("user_id", userData.id)
+        .eq("user_id", userId)
         .maybeSingle();
 
       if (existingError) {
@@ -180,15 +202,13 @@ const WorkspaceDetails = () => {
         throw new Error("User is already a member of this workspace.");
       }
 
-      console.log("User is not a member yet, proceeding with invitation");
-
-      // Step 3: Add user as a member
+      // Step 3: Add user as a workspace member
       const { data: newMember, error: memberError } = await supabase
         .from("workspace_members")
         .insert([
           {
             workspace_id: id,
-            user_id: userData.id,
+            user_id: userId,
             role: "member",
           },
         ])
@@ -206,7 +226,7 @@ const WorkspaceDetails = () => {
       if (selectedBoards.length > 0) {
         const boardMembers = selectedBoards.map(boardId => ({
           board_id: boardId,
-          user_id: userData.id
+          user_id: userId
         }));
 
         const { error: boardMemberError } = await supabase
@@ -223,7 +243,7 @@ const WorkspaceDetails = () => {
 
       toast({
         title: "Success",
-        description: `Member ${userData.email} added successfully`,
+        description: `Member ${email} added successfully`,
       });
 
       setIsInviteOpen(false);
