@@ -58,6 +58,7 @@ const WorkspaceDetails = () => {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isNewBoardOpen, setIsNewBoardOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isConfirmLeaveOpen, setIsConfirmLeaveOpen] = useState(false);
 
   useEffect(() => {
     fetchWorkspaceDetails();
@@ -291,6 +292,60 @@ const WorkspaceDetails = () => {
     }
   };
 
+  const leaveWorkspace = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not found");
+
+      const { error } = await supabase
+        .from("workspace_members")
+        .delete()
+        .eq("workspace_id", id)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "You have left the workspace",
+      });
+
+      navigate("/");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleMemberRole = async (memberId: string, currentRole: string) => {
+    try {
+      const newRole = currentRole === "member" ? "owner" : "member";
+      
+      const { error } = await supabase
+        .from("workspace_members")
+        .update({ role: newRole })
+        .eq("id", memberId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `Member role updated to ${newRole}`,
+      });
+
+      fetchWorkspaceDetails();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoading) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
@@ -317,12 +372,24 @@ const WorkspaceDetails = () => {
               {workspace.name}
             </h1>
           </div>
-          {isOwner && (
-            <Button variant="outline" size="sm" className="hover-lift">
-              <Settings className="w-4 h-4 mr-2" />
-              Settings
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {!isOwner && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setIsConfirmLeaveOpen(true)}
+                className="text-destructive hover:bg-destructive/10"
+              >
+                Leave Workspace
+              </Button>
+            )}
+            {isOwner && (
+              <Button variant="outline" size="sm" className="hover-lift">
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
+              </Button>
+            )}
+          </div>
         </div>
       </nav>
 
@@ -356,13 +423,22 @@ const WorkspaceDetails = () => {
                     <TableCell className="capitalize">{member.role}</TableCell>
                     {isOwner && member.role !== "owner" && (
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeMember(member.id)}
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleMemberRole(member.id, member.role)}
+                          >
+                            {member.role === "member" ? "Promote" : "Demote"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeMember(member.id)}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     )}
                   </TableRow>
@@ -484,6 +560,32 @@ const WorkspaceDetails = () => {
             </Button>
             <Button onClick={createBoard} disabled={isProcessing}>
               {isProcessing ? "Creating..." : "Create Board"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Leave Dialog */}
+      <Dialog open={isConfirmLeaveOpen} onOpenChange={setIsConfirmLeaveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Leave Workspace</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to leave this workspace? You will lose access to all boards and won't be able to rejoin unless invited again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setIsConfirmLeaveOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={leaveWorkspace}
+            >
+              Leave Workspace
             </Button>
           </div>
         </DialogContent>
