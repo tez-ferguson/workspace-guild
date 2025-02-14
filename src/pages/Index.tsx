@@ -1,10 +1,9 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -20,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Workspace {
   id: string;
@@ -53,11 +53,11 @@ const Index = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     checkSession();
 
-    // Subscribe to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
         navigate("/auth");
@@ -97,8 +97,10 @@ const Index = () => {
 
   const fetchInvitations = async () => {
     try {
+      setError(null);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user?.email) {
+        setError("No user email found in session");
         console.log("No user email found in session");
         return;
       }
@@ -111,6 +113,7 @@ const Index = () => {
           id,
           workspace_id,
           status,
+          invited_email,
           workspace:workspaces (
             name
           )
@@ -119,11 +122,13 @@ const Index = () => {
         .eq("status", "pending");
 
       if (error) {
+        setError(`Database error: ${error.message}`);
         console.error("Supabase error:", error);
         throw error;
       }
 
       console.log("Raw invitations data:", data);
+      console.log("Query parameters:", { email: session.user.email, status: 'pending' });
 
       const transformedInvitations: Invitation[] = (data || []).map(item => ({
         id: item.id,
@@ -136,7 +141,9 @@ const Index = () => {
 
       console.log("Transformed invitations:", transformedInvitations);
       setInvitations(transformedInvitations);
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error?.message || "Unknown error occurred";
+      setError(`Error fetching invitations: ${errorMessage}`);
       console.error("Error fetching invitations:", error);
       toast({
         title: "Error",
@@ -154,7 +161,6 @@ const Index = () => {
         return;
       }
 
-      // First update the invitation status
       const { error: updateError } = await supabase
         .from("workspace_invitations")
         .update({ status: "accepted" as InvitationStatus })
@@ -162,7 +168,6 @@ const Index = () => {
 
       if (updateError) throw updateError;
 
-      // Then add user to workspace_members
       const { error: memberError } = await supabase
         .from("workspace_members")
         .insert([{
@@ -178,7 +183,6 @@ const Index = () => {
         description: "You have joined the workspace",
       });
 
-      // Refresh the lists
       await fetchInvitations();
       await fetchWorkspaces();
     } catch (error: any) {
@@ -234,7 +238,6 @@ const Index = () => {
 
       console.log("Fetching workspaces for user:", user.id);
 
-      // Fetch workspaces where user is either owner or member
       const { data: workspaceMembers, error: memberError } = await supabase
         .from("workspace_members")
         .select(`
@@ -256,7 +259,6 @@ const Index = () => {
 
       console.log("Raw workspace data:", workspaceMembers);
 
-      // Transform the data to match our Workspace interface
       const transformedWorkspaces = workspaceMembers?.map(member => ({
         id: member.workspace.id,
         name: member.workspace.name,
@@ -288,7 +290,6 @@ const Index = () => {
         return;
       }
 
-      // Create workspace
       const { data: workspace, error: workspaceError } = await supabase
         .from("workspaces")
         .insert([
@@ -302,7 +303,6 @@ const Index = () => {
 
       if (workspaceError) throw workspaceError;
 
-      // Add creator as workspace member with owner role
       const { error: memberError } = await supabase
         .from("workspace_members")
         .insert([
@@ -359,6 +359,30 @@ const Index = () => {
       </nav>
 
       <main className="max-w-7xl mx-auto pt-24 px-6 pb-16">
+        {/* Debug Information */}
+        <div className="mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Debug Information</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="text-sm bg-gray-50 p-4 rounded">
+                {JSON.stringify({
+                  invitationsCount: invitations.length,
+                  error: error,
+                  currentUserEmail: supabase.auth.getSession().then(({data}) => data.session?.user?.email),
+                }, null, 2)}
+              </pre>
+            </CardContent>
+          </Card>
+        </div>
+
+        {error && (
+          <Alert variant="destructive" className="mb-8">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         {invitations.length > 0 && (
           <section className="mb-8">
             <h2 className="text-lg font-semibold mb-4">Pending Invitations</h2>
