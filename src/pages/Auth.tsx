@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,12 +16,25 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Clear any existing session on component mount
+  useEffect(() => {
+    const clearSession = async () => {
+      try {
+        await supabase.auth.signOut();
+      } catch (error) {
+        // Ignore logout errors as we just want to ensure a clean state
+      }
+    };
+    clearSession();
+  }, []);
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
       if (isSignUp) {
+        // First, try to sign up the user
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -30,20 +43,33 @@ const Auth = () => {
         if (signUpError) throw signUpError;
 
         if (authData.user) {
-          // First try to delete any existing user record
-          await supabase
-            .from("users")
-            .delete()
-            .match({ id: authData.user.id });
+          // Try to delete any existing user record first
+          try {
+            await supabase
+              .from("users")
+              .delete()
+              .match({ id: authData.user.id });
+          } catch (error) {
+            // Ignore delete errors as the record might not exist
+          }
 
-          // Then create the new user profile
+          // Create the new user profile
           const { error: insertError } = await supabase
             .from("users")
             .insert([{ id: authData.user.id, email, name }]);
 
           if (insertError) throw insertError;
+
+          // Automatically sign in after successful signup
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+
+          if (signInError) throw signInError;
         }
       } else {
+        // Regular sign in
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
