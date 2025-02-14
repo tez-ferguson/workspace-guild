@@ -62,10 +62,9 @@ const Index = () => {
         navigate("/auth");
         return;
       }
-      await Promise.all([
-        fetchWorkspaces(),
-        fetchInvitations(),
-      ]);
+      // First fetch invitations, then workspaces
+      await fetchInvitations();
+      await fetchWorkspaces();
     } catch (error) {
       console.error("Session error:", error);
       navigate("/auth");
@@ -81,12 +80,13 @@ const Index = () => {
 
       console.log("Fetching invitations for email:", user.email);
 
+      // Updated query to properly handle the join
       const { data, error } = await supabase
         .from("workspace_invitations")
         .select(`
           id,
           workspace_id,
-          workspace:workspaces (
+          workspaces!inner (
             name
           )
         `)
@@ -101,7 +101,7 @@ const Index = () => {
         id: item.id,
         workspace_id: item.workspace_id,
         workspace: {
-          name: item.workspace.name
+          name: item.workspaces.name
         }
       }));
 
