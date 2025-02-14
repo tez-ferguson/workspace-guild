@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -406,7 +405,7 @@ const WorkspaceDetails = () => {
 
       toast({
         title: "Success",
-        description: `Member role updated to ${newRole}`,
+        description: `Member ${newRole === "owner" ? "promoted to owner" : "demoted to member"}`,
       });
 
       fetchWorkspaceDetails();
@@ -493,7 +492,7 @@ const WorkspaceDetails = () => {
                     <TableCell>{member.user.name}</TableCell>
                     <TableCell>{member.user.email}</TableCell>
                     <TableCell className="capitalize">{member.role}</TableCell>
-                    {isOwner && member.role !== "owner" && (
+                    {isOwner && member.user.id !== workspace.owner_id && (
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Button
@@ -501,7 +500,7 @@ const WorkspaceDetails = () => {
                             size="sm"
                             onClick={() => toggleMemberRole(member.id, member.role)}
                           >
-                            {member.role === "member" ? "Promote" : "Demote"}
+                            {member.role === "member" ? "Promote to Owner" : "Demote to Member"}
                           </Button>
                           <Button
                             variant="ghost"
