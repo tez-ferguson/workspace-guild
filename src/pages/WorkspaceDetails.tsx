@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -844,7 +845,7 @@ const WorkspaceDetails = () => {
                 <div key={board.id} className="flex items-center space-x-2">
                   <Checkbox
                     id={`board-${board.id}`}
-                    checked={memberBoardPermissions[selectedMember?.user.id || ""]?.includes(board.id)}
+                    checked={memberBoardPermissions[selectedMember?.id || ""]?.includes(board.id)}
                     onCheckedChange={(checked) => {
                       if (selectedMember) {
                         updateBoardPermissions(selectedMember.id, board.id, !!checked);
@@ -853,7 +854,7 @@ const WorkspaceDetails = () => {
                   />
                   <Label htmlFor={`board-${board.id}`}>{board.name}</Label>
                 </div>
-              </div>
+              ))}
             </div>
           </div>
         </DialogContent>
