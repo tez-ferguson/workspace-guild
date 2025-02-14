@@ -8,6 +8,7 @@ import "@fontsource-variable/inter/index.css";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import WorkspaceDetails from "./pages/WorkspaceDetails";
 import { useEffect, useState } from "react";
 import { supabase } from "./integrations/supabase/client";
 
@@ -59,6 +60,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Index />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workspaces/:id"
+              element={
+                <ProtectedRoute>
+                  <WorkspaceDetails />
                 </ProtectedRoute>
               }
             />
