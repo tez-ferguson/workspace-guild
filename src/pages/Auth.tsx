@@ -16,13 +16,19 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Clear any existing session on component mount
+  // Clear any existing session and check auth state on component mount
   useEffect(() => {
     const clearSession = async () => {
       try {
+        // Force sign out and clear any invalid sessions
         await supabase.auth.signOut();
+        const { error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error("Session error:", sessionError);
+        }
       } catch (error) {
-        // Ignore logout errors as we just want to ensure a clean state
+        console.error("Error clearing session:", error);
       }
     };
     clearSession();
@@ -38,21 +44,16 @@ const Auth = () => {
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              name: name, // Store name in user metadata
+            },
+          },
         });
 
         if (signUpError) throw signUpError;
 
         if (authData.user) {
-          // Try to delete any existing user record first
-          try {
-            await supabase
-              .from("users")
-              .delete()
-              .match({ id: authData.user.id });
-          } catch (error) {
-            // Ignore delete errors as the record might not exist
-          }
-
           // Create the new user profile
           const { error: insertError } = await supabase
             .from("users")
@@ -60,26 +61,37 @@ const Auth = () => {
 
           if (insertError) throw insertError;
 
-          // Automatically sign in after successful signup
-          const { error: signInError } = await supabase.auth.signInWithPassword({
-            email,
-            password,
+          toast({
+            title: "Success",
+            description: "Account created successfully. Please sign in.",
           });
 
-          if (signInError) throw signInError;
+          // Switch to sign in mode
+          setIsSignUp(false);
+          setPassword("");
         }
       } else {
-        // Regular sign in
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        // Regular sign in with session refresh
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
 
         if (signInError) throw signInError;
-      }
 
-      navigate("/");
+        if (data.session) {
+          // Verify the session is valid
+          const { data: { user }, error: userError } = await supabase.auth.getUser();
+          
+          if (userError || !user) {
+            throw new Error("Failed to verify user session");
+          }
+
+          navigate("/");
+        }
+      }
     } catch (error: any) {
+      console.error("Auth error:", error);
       toast({
         title: "Error",
         description: error.message,
