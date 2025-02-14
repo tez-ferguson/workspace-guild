@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -194,7 +193,8 @@ const WorkspaceDetails = () => {
     setIsProcessing(true);
 
     try {
-      const { data: board, error } = await supabase
+      // First create the board
+      const { data: board, error: boardError } = await supabase
         .from("boards")
         .insert([
           {
@@ -205,7 +205,23 @@ const WorkspaceDetails = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (boardError) throw boardError;
+
+      // Get the current user to add them as a board member
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not found");
+
+      // Add the creator as a board member
+      const { error: memberError } = await supabase
+        .from("board_members")
+        .insert([
+          {
+            board_id: board.id,
+            user_id: user.id,
+          },
+        ]);
+
+      if (memberError) throw memberError;
 
       toast({
         title: "Success",
@@ -226,18 +242,19 @@ const WorkspaceDetails = () => {
     }
   };
 
-  const removeMember = async (memberId: string) => {
+  const deleteBoard = async (boardId: string) => {
     try {
+      // Delete board (will cascade delete board_members due to FK constraint)
       const { error } = await supabase
-        .from("workspace_members")
+        .from("boards")
         .delete()
-        .eq("id", memberId);
+        .eq("id", boardId);
 
       if (error) throw error;
 
       toast({
         title: "Success",
-        description: "Member removed successfully",
+        description: "Board deleted successfully",
       });
 
       fetchWorkspaceDetails();
@@ -250,18 +267,18 @@ const WorkspaceDetails = () => {
     }
   };
 
-  const deleteBoard = async (boardId: string) => {
+  const removeMember = async (memberId: string) => {
     try {
       const { error } = await supabase
-        .from("boards")
+        .from("workspace_members")
         .delete()
-        .eq("id", boardId);
+        .eq("id", memberId);
 
       if (error) throw error;
 
       toast({
         title: "Success",
-        description: "Board deleted successfully",
+        description: "Member removed successfully",
       });
 
       fetchWorkspaceDetails();
@@ -374,7 +391,9 @@ const WorkspaceDetails = () => {
                 {boards.map((board) => (
                   <div
                     key={board.id}
-                    className="bg-white rounded-lg shadow-sm border border-workspace-200 p-4"
+                    className="bg-white rounded-lg shadow-sm border border-workspace-200 p-4 hover:shadow-md transition-shadow"
+                    onClick={() => navigate(`/boards/${board.id}`)}
+                    role="button"
                   >
                     <div className="flex items-center justify-between">
                       <h3 className="font-medium">{board.name}</h3>
@@ -382,7 +401,10 @@ const WorkspaceDetails = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => deleteBoard(board.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteBoard(board.id);
+                          }}
                         >
                           <Trash2 className="w-4 h-4 text-destructive" />
                         </Button>
