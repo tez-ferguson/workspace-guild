@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,10 +33,12 @@ interface Workspace {
   }[];
 }
 
+type InvitationStatus = 'pending' | 'accepted' | 'rejected';
+
 interface Invitation {
   id: string;
   workspace_id: string;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: InvitationStatus;
   workspace: {
     name: string;
   };
@@ -103,7 +106,7 @@ const Index = () => {
       const transformedInvitations: Invitation[] = (data || []).map(item => ({
         id: item.id,
         workspace_id: item.workspace_id,
-        status: item.status,
+        status: item.status as InvitationStatus,
         workspace: {
           name: item.workspace.name
         }
@@ -132,7 +135,7 @@ const Index = () => {
       // First update the invitation status
       const { error: updateError } = await supabase
         .from("workspace_invitations")
-        .update({ status: "accepted" })
+        .update({ status: "accepted" as InvitationStatus })
         .eq("id", invitationId);
 
       if (updateError) throw updateError;
@@ -169,7 +172,7 @@ const Index = () => {
     try {
       const { error } = await supabase
         .from("workspace_invitations")
-        .update({ status: "rejected" })
+        .update({ status: "rejected" as InvitationStatus })
         .eq("id", invitationId);
 
       if (error) throw error;
