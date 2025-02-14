@@ -22,11 +22,6 @@ const Auth = () => {
       try {
         // Force sign out and clear any invalid sessions
         await supabase.auth.signOut();
-        const { error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          console.error("Session error:", sessionError);
-        }
       } catch (error) {
         console.error("Error clearing session:", error);
       }
@@ -38,15 +33,30 @@ const Auth = () => {
     e.preventDefault();
     setIsLoading(true);
 
+    // Basic validation
+    if (!email || !password) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       if (isSignUp) {
+        if (!name) {
+          throw new Error("Name is required for signup");
+        }
+
         // First, try to sign up the user
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: {
-              name: name, // Store name in user metadata
+              name: name,
             },
           },
         });
@@ -63,7 +73,7 @@ const Auth = () => {
 
           toast({
             title: "Success",
-            description: "Account created successfully. Please sign in.",
+            description: "Account created successfully. Please verify your email and sign in.",
           });
 
           // Switch to sign in mode
@@ -73,28 +83,32 @@ const Auth = () => {
       } else {
         // Regular sign in with session refresh
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
+          email: email.trim().toLowerCase(), // Normalize email
           password,
         });
 
-        if (signInError) throw signInError;
-
-        if (data.session) {
-          // Verify the session is valid
-          const { data: { user }, error: userError } = await supabase.auth.getUser();
-          
-          if (userError || !user) {
-            throw new Error("Failed to verify user session");
+        if (signInError) {
+          if (signInError.message.includes("Invalid login credentials")) {
+            throw new Error("Invalid email or password. Please try again.");
           }
+          throw signInError;
+        }
 
+        if (data?.session) {
+          toast({
+            title: "Success",
+            description: "Signed in successfully",
+          });
           navigate("/");
+        } else {
+          throw new Error("Failed to create session. Please try again.");
         }
       }
     } catch (error: any) {
       console.error("Auth error:", error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "An error occurred during authentication",
         variant: "destructive",
       });
     } finally {
@@ -140,9 +154,10 @@ const Auth = () => {
               id="email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value.trim().toLowerCase())}
               required
               disabled={isLoading}
+              placeholder="your@email.com"
             />
           </div>
           <div className="space-y-2">
@@ -156,6 +171,8 @@ const Auth = () => {
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={isLoading}
+              placeholder="••••••••"
+              minLength={6}
             />
           </div>
           <Button type="submit" className="w-full" disabled={isLoading}>
@@ -170,7 +187,11 @@ const Auth = () => {
         <div className="text-center">
           <button
             type="button"
-            onClick={() => setIsSignUp(!isSignUp)}
+            onClick={() => {
+              setIsSignUp(!isSignUp);
+              setPassword("");
+              setName("");
+            }}
             className="text-sm text-workspace-600 hover:underline"
           >
             {isSignUp
