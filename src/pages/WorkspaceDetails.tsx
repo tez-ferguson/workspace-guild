@@ -37,6 +37,7 @@ interface Member {
     name: string;
     email: string;
   };
+  board_permissions?: string[]; // Array of board IDs the member has access to
 }
 
 interface Board {
@@ -67,6 +68,9 @@ const WorkspaceDetails = () => {
   const [isNewBoardOpen, setIsNewBoardOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isConfirmLeaveOpen, setIsConfirmLeaveOpen] = useState(false);
+  const [memberBoardPermissions, setMemberBoardPermissions] = useState<{ [key: string]: string[] }>({});
+  const [isManageBoardsOpen, setIsManageBoardsOpen] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
 
   useEffect(() => {
     fetchWorkspaceDetails();
@@ -126,6 +130,36 @@ const WorkspaceDetails = () => {
 
       if (boardsError) throw boardsError;
       setBoards(boardsData);
+
+      // Fetch board permissions for all members
+      const { data: permissions, error: permissionsError } = await supabase
+        .from("board_members")
+        .select("board_id, user_id")
+        .in(
+          "user_id",
+          membersData.map((member) => member.users.id)
+        );
+
+      if (permissionsError) throw permissionsError;
+
+      // Create a map of member ID to their board permissions
+      const permissionsMap: { [key: string]: string[] } = {};
+      permissions?.forEach((permission) => {
+        if (!permissionsMap[permission.user_id]) {
+          permissionsMap[permission.user_id] = [];
+        }
+        permissionsMap[permission.user_id].push(permission.board_id);
+      });
+
+      // Update members with board permissions
+      setMembers((prevMembers) =>
+        prevMembers.map((member) => ({
+          ...member,
+          board_permissions: permissionsMap[member.user.id] || [],
+        }))
+      );
+
+      setMemberBoardPermissions(permissionsMap);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -134,6 +168,72 @@ const WorkspaceDetails = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const updateBoardPermissions = async (memberId: string, boardId: string, hasAccess: boolean) => {
+    try {
+      const userId = members.find((member) => member.id === memberId)?.user.id;
+
+      if (!userId) {
+        throw new Error("User ID not found for the given member ID.");
+      }
+
+      if (hasAccess) {
+        // Add board permission
+        const { error: insertError } = await supabase
+          .from("board_members")
+          .insert({
+            board_id: boardId,
+            user_id: userId,
+          });
+
+        if (insertError) throw insertError;
+      } else {
+        // Remove board permission
+        const { error: deleteError } = await supabase
+          .from("board_members")
+          .delete()
+          .eq("board_id", boardId)
+          .eq("user_id", userId);
+
+        if (deleteError) throw deleteError;
+      }
+
+      // Update local state
+      setMemberBoardPermissions(prev => {
+        const updatedPermissions = { ...prev };
+        if (hasAccess) {
+          updatedPermissions[userId] = [...(updatedPermissions[userId] || []), boardId];
+        } else {
+          updatedPermissions[userId] = (updatedPermissions[userId] || []).filter(id => id !== boardId);
+        }
+        return updatedPermissions;
+      });
+
+      setMembers((prevMembers) =>
+        prevMembers.map((member) =>
+          member.id === memberId
+            ? {
+                ...member,
+                board_permissions: hasAccess
+                  ? [...(member.board_permissions || []), boardId]
+                  : (member.board_permissions || []).filter(id => id !== boardId),
+              }
+            : member
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: `Board permission ${hasAccess ? "granted" : "removed"} successfully`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -424,6 +524,11 @@ const WorkspaceDetails = () => {
     }
   };
 
+  const openManageBoards = (member: Member) => {
+    setSelectedMember(member);
+    setIsManageBoardsOpen(true);
+  };
+
   if (isLoading) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
@@ -489,7 +594,7 @@ const WorkspaceDetails = () => {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
-                  {isOwner && <TableHead className="w-24">Actions</TableHead>}
+                  {isOwner && <TableHead className="w-32">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -521,6 +626,13 @@ const WorkspaceDetails = () => {
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openManageBoards(member)}
+                          >
+                            <Settings className="w-4 h-4 text-blue-600" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -700,6 +812,36 @@ const WorkspaceDetails = () => {
                 >
                   Leave Workspace
                 </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Manage Board Permissions Dialog */}
+          <Dialog open={isManageBoardsOpen} onOpenChange={setIsManageBoardsOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Manage Board Access</DialogTitle>
+                <DialogDescription>
+                  Select which boards {selectedMember?.user.name} can access
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-4">
+                  {boards.map((board) => (
+                    <div key={board.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`board-${board.id}`}
+                        checked={memberBoardPermissions[selectedMember?.user.id || ""]?.includes(board.id)}
+                        onCheckedChange={(checked) => {
+                          if (selectedMember) {
+                            updateBoardPermissions(selectedMember.id, board.id, !!checked);
+                          }
+                        }}
+                      />
+                      <Label htmlFor={`board-${board.id}`}>{board.name}</Label>
+                    </div>
+                  ))}
+                </div>
               </div>
             </DialogContent>
           </Dialog>

@@ -45,6 +45,42 @@ export type Database = {
           },
         ]
       }
+      board_permissions: {
+        Row: {
+          board_id: string
+          created_at: string
+          id: string
+          workspace_member_id: string
+        }
+        Insert: {
+          board_id: string
+          created_at?: string
+          id?: string
+          workspace_member_id: string
+        }
+        Update: {
+          board_id?: string
+          created_at?: string
+          id?: string
+          workspace_member_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "board_permissions_board_id_fkey"
+            columns: ["board_id"]
+            isOneToOne: false
+            referencedRelation: "boards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "board_permissions_workspace_member_id_fkey"
+            columns: ["workspace_member_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boards: {
         Row: {
           created_at: string | null
