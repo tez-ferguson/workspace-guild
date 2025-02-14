@@ -56,19 +56,39 @@ const Index = () => {
 
   useEffect(() => {
     checkSession();
-  }, []);
+
+    // Subscribe to auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        navigate("/auth");
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [navigate]);
 
   const checkSession = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error("Session error:", sessionError);
         navigate("/auth");
         return;
       }
-      await fetchWorkspaces();
-      await fetchInvitations();
+
+      if (!session) {
+        console.log("No active session found");
+        navigate("/auth");
+        return;
+      }
+
+      console.log("Active session found:", session.user.email);
+      await Promise.all([fetchWorkspaces(), fetchInvitations()]);
     } catch (error) {
-      console.error("Session error:", error);
+      console.error("Session check error:", error);
       navigate("/auth");
     } finally {
       setIsLoading(false);
@@ -77,17 +97,13 @@ const Index = () => {
 
   const fetchInvitations = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.email) {
+        console.log("No user email found in session");
+        return;
+      }
 
-      console.log("Fetching invitations for email:", user.email);
-
-      // First, let's check if there are any invitations at all
-      const { count, error: countError } = await supabase
-        .from("workspace_invitations")
-        .select('*', { count: 'exact', head: true });
-      
-      console.log("Total invitations in table:", count);
+      console.log("Fetching invitations for email:", session.user.email);
 
       const { data, error } = await supabase
         .from("workspace_invitations")
@@ -99,7 +115,7 @@ const Index = () => {
             name
           )
         `)
-        .eq("invited_email", user.email)
+        .eq("invited_email", session.user.email)
         .eq("status", "pending");
 
       if (error) {
@@ -108,12 +124,11 @@ const Index = () => {
       }
 
       console.log("Raw invitations data:", data);
-      console.log("Query parameters:", { email: user.email, status: 'pending' });
 
       const transformedInvitations: Invitation[] = (data || []).map(item => ({
         id: item.id,
         workspace_id: item.workspace_id,
-        status: item.status,
+        status: item.status as InvitationStatus,
         workspace: {
           name: item.workspace.name
         }
@@ -121,9 +136,6 @@ const Index = () => {
 
       console.log("Transformed invitations:", transformedInvitations);
       setInvitations(transformedInvitations);
-
-      // Log the current status of the invitations array to verify it's being set
-      console.log("Invitations state after setting:", transformedInvitations.length);
     } catch (error) {
       console.error("Error fetching invitations:", error);
       toast({
@@ -326,8 +338,6 @@ const Index = () => {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
-  console.log("Rendering with invitations:", invitations.length); // Add this log
-
   return (
     <div className="min-h-screen bg-workspace-50">
       <nav className="glass-effect fixed top-0 w-full border-b border-workspace-200 px-6 py-4 z-50">
@@ -349,14 +359,6 @@ const Index = () => {
       </nav>
 
       <main className="max-w-7xl mx-auto pt-24 px-6 pb-16">
-        {/* Always render this section for debugging */}
-        <section className="mb-8">
-          <h2 className="text-lg font-semibold mb-4">Invitations Debug</h2>
-          <pre className="bg-gray-100 p-4 rounded">
-            {JSON.stringify({ invitationsCount: invitations.length }, null, 2)}
-          </pre>
-        </section>
-
         {invitations.length > 0 && (
           <section className="mb-8">
             <h2 className="text-lg font-semibold mb-4">Pending Invitations</h2>
