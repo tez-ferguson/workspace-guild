@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,6 +82,13 @@ const Index = () => {
 
       console.log("Fetching invitations for email:", user.email);
 
+      // First, let's check if there are any invitations at all
+      const { count, error: countError } = await supabase
+        .from("workspace_invitations")
+        .select('*', { count: 'exact', head: true });
+      
+      console.log("Total invitations in table:", count);
+
       const { data, error } = await supabase
         .from("workspace_invitations")
         .select(`
@@ -100,11 +108,12 @@ const Index = () => {
       }
 
       console.log("Raw invitations data:", data);
+      console.log("Query parameters:", { email: user.email, status: 'pending' });
 
       const transformedInvitations: Invitation[] = (data || []).map(item => ({
         id: item.id,
         workspace_id: item.workspace_id,
-        status: item.status as InvitationStatus,
+        status: item.status,
         workspace: {
           name: item.workspace.name
         }
@@ -112,6 +121,9 @@ const Index = () => {
 
       console.log("Transformed invitations:", transformedInvitations);
       setInvitations(transformedInvitations);
+
+      // Log the current status of the invitations array to verify it's being set
+      console.log("Invitations state after setting:", transformedInvitations.length);
     } catch (error) {
       console.error("Error fetching invitations:", error);
       toast({
@@ -314,6 +326,8 @@ const Index = () => {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
+  console.log("Rendering with invitations:", invitations.length); // Add this log
+
   return (
     <div className="min-h-screen bg-workspace-50">
       <nav className="glass-effect fixed top-0 w-full border-b border-workspace-200 px-6 py-4 z-50">
@@ -335,6 +349,14 @@ const Index = () => {
       </nav>
 
       <main className="max-w-7xl mx-auto pt-24 px-6 pb-16">
+        {/* Always render this section for debugging */}
+        <section className="mb-8">
+          <h2 className="text-lg font-semibold mb-4">Invitations Debug</h2>
+          <pre className="bg-gray-100 p-4 rounded">
+            {JSON.stringify({ invitationsCount: invitations.length }, null, 2)}
+          </pre>
+        </section>
+
         {invitations.length > 0 && (
           <section className="mb-8">
             <h2 className="text-lg font-semibold mb-4">Pending Invitations</h2>
