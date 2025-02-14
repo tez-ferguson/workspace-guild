@@ -132,35 +132,42 @@ const WorkspaceDetails = () => {
   };
 
   const inviteMember = async () => {
-    if (!newMemberEmail.trim()) return;
+    if (!newMemberEmail.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter an email address",
+        variant: "destructive",
+      });
+      return;
+    }
     setIsProcessing(true);
 
     try {
-      // First check if user exists
+      // Step 1: Get user_id from email
       const { data: userData, error: userError } = await supabase
         .from("users")
-        .select("id")
+        .select("id, email")
         .eq("email", newMemberEmail.trim())
-        .single();
+        .maybeSingle();
 
-      if (userError) {
-        throw new Error("User not found. Please ensure the email is correct.");
+      if (!userData) {
+        throw new Error("User not found. Please ensure the email is correct and the user has signed up.");
       }
 
-      // Check if user is already a member
+      // Step 2: Check if user is already a member
       const { data: existingMember, error: existingError } = await supabase
         .from("workspace_members")
         .select("id")
         .eq("workspace_id", id)
         .eq("user_id", userData.id)
-        .single();
+        .maybeSingle();
 
       if (existingMember) {
         throw new Error("User is already a member of this workspace.");
       }
 
-      // Add user as a member
-      const { data: memberData, error: memberError } = await supabase
+      // Step 3: Add user as a member
+      const { error: memberError } = await supabase
         .from("workspace_members")
         .insert([
           {
@@ -168,13 +175,11 @@ const WorkspaceDetails = () => {
             user_id: userData.id,
             role: "member",
           },
-        ])
-        .select()
-        .single();
+        ]);
 
       if (memberError) throw memberError;
 
-      // Add board access for selected boards
+      // Step 4: Add board access for selected boards
       if (selectedBoards.length > 0) {
         const boardMembers = selectedBoards.map(boardId => ({
           board_id: boardId,
@@ -190,7 +195,7 @@ const WorkspaceDetails = () => {
 
       toast({
         title: "Success",
-        description: "Member added successfully",
+        description: `Member ${userData.email} added successfully`,
       });
 
       setIsInviteOpen(false);
@@ -198,6 +203,7 @@ const WorkspaceDetails = () => {
       setSelectedBoards([]);
       fetchWorkspaceDetails();
     } catch (error: any) {
+      console.error("Error adding member:", error);
       toast({
         title: "Error",
         description: error.message,
