@@ -74,36 +74,48 @@ const Index = () => {
       // For each workspace, fetch only the boards the user has access to
       const workspacesWithBoards = await Promise.all(
         workspacesData.map(async (ws) => {
-          let boardsQuery = supabase
-            .from("boards")
-            .select("id, name, created_at")
-            .eq("workspace_id", ws.workspaces.id);
-
-          // If user is not the workspace owner, only fetch boards they have access to
-          if (ws.workspaces.owner_id !== user.id) {
-            const { data: boardMembers } = await supabase
-              .from("board_members")
-              .select("board_id")
-              .eq("user_id", user.id);
-
-            const boardIds = boardMembers?.map(bm => bm.board_id) || [];
-            boardsQuery = boardsQuery.in("id", boardIds);
+          // If user is the workspace owner, fetch all boards
+          if (ws.workspaces.owner_id === user.id) {
+            const { data: boards } = await supabase
+              .from("boards")
+              .select("id, name, created_at")
+              .eq("workspace_id", ws.workspace_id);
+            
+            return {
+              id: ws.workspaces.id,
+              name: ws.workspaces.name,
+              owner_id: ws.workspaces.owner_id,
+              role: ws.role,
+              boards: boards || []
+            };
           }
 
-          const { data: boards } = await boardsQuery;
+          // If user is a member, fetch only boards they have access to
+          const { data: memberBoards } = await supabase
+            .from("boards")
+            .select("id, name, created_at")
+            .eq("workspace_id", ws.workspace_id)
+            .in(
+              "id",
+              supabase
+                .from("board_members")
+                .select("board_id")
+                .eq("user_id", user.id)
+            );
 
           return {
             id: ws.workspaces.id,
             name: ws.workspaces.name,
             owner_id: ws.workspaces.owner_id,
             role: ws.role,
-            boards: boards || []
+            boards: memberBoards || []
           };
         })
       );
 
       setWorkspaces(workspacesWithBoards);
     } catch (error: any) {
+      console.error("Error fetching workspaces:", error);
       toast({
         title: "Error",
         description: error.message,
