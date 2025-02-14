@@ -30,7 +30,13 @@ const Auth = () => {
         if (signUpError) throw signUpError;
 
         if (authData.user) {
-          // Create user profile
+          // First try to delete any existing user record
+          await supabase
+            .from("users")
+            .delete()
+            .match({ id: authData.user.id });
+
+          // Then create the new user profile
           const { error: insertError } = await supabase
             .from("users")
             .insert([{ id: authData.user.id, email, name }]);
