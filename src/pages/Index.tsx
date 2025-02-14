@@ -69,6 +69,8 @@ const Index = () => {
     } catch (error) {
       console.error("Session error:", error);
       navigate("/auth");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -77,28 +79,33 @@ const Index = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      console.log("Fetching invitations for email:", user.email);
+
       const { data, error } = await supabase
         .from("workspace_invitations")
         .select(`
           id,
           workspace_id,
-          workspaces (
+          workspace:workspaces (
             name
           )
         `)
         .eq("invited_email", user.email);
 
       if (error) throw error;
-      
+
+      console.log("Raw invitations data:", data);
+
       // Transform the data to match our Invitation interface
       const transformedInvitations: Invitation[] = (data || []).map(item => ({
         id: item.id,
         workspace_id: item.workspace_id,
         workspace: {
-          name: item.workspaces.name
+          name: item.workspace.name
         }
       }));
 
+      console.log("Transformed invitations:", transformedInvitations);
       setInvitations(transformedInvitations);
     } catch (error) {
       console.error("Error fetching invitations:", error);
@@ -169,12 +176,14 @@ const Index = () => {
         return;
       }
 
+      console.log("Fetching workspaces for user:", user.id);
+
       // Fetch workspaces where user is either owner or member
       const { data: workspaceMembers, error: memberError } = await supabase
         .from("workspace_members")
         .select(`
           role,
-          workspace: workspaces (
+          workspace:workspaces (
             id,
             name,
             owner_id,
@@ -189,6 +198,8 @@ const Index = () => {
 
       if (memberError) throw memberError;
 
+      console.log("Raw workspace data:", workspaceMembers);
+
       // Transform the data to match our Workspace interface
       const transformedWorkspaces = workspaceMembers?.map(member => ({
         id: member.workspace.id,
@@ -198,15 +209,15 @@ const Index = () => {
         boards: member.workspace.boards || []
       })) || [];
 
+      console.log("Transformed workspaces:", transformedWorkspaces);
       setWorkspaces(transformedWorkspaces);
     } catch (error: any) {
+      console.error("Error fetching workspaces:", error);
       toast({
         title: "Error",
         description: error.message,
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
