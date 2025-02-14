@@ -20,6 +20,7 @@ serve(async (req) => {
     )
 
     const { email, workspaceId, invitedBy } = await req.json()
+    console.log('Received invitation request:', { email, workspaceId, invitedBy })
 
     // Check if user already exists
     const { data: existingUser } = await supabaseClient.auth.admin.getUserByEmail(email)
@@ -39,25 +40,35 @@ serve(async (req) => {
       userId = existingUser.user.id
     }
 
-    // Create invitation
-    const { error: inviteError } = await supabaseClient
+    // Create workspace invitation
+    const { data: invitation, error: inviteError } = await supabaseClient
       .from('workspace_invitations')
       .insert({
         workspace_id: workspaceId,
         invited_email: email,
         invited_by: invitedBy,
+        status: 'pending',
+        role: 'member'
       })
+      .select()
+      .single()
 
-    if (inviteError) throw inviteError
+    if (inviteError) {
+      console.error('Error creating invitation:', inviteError)
+      throw inviteError
+    }
+
+    console.log('Successfully created invitation:', invitation)
 
     return new Response(
-      JSON.stringify({ success: true }),
+      JSON.stringify({ success: true, invitation }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       },
     )
   } catch (error) {
+    console.error('Error in invite-user function:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
       { 
