@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -143,16 +144,18 @@ const WorkspaceDetails = () => {
     setIsProcessing(true);
 
     try {
-      // Step 1: Get user_id from email
+      // Step 1: Get user_id from email - use eq and single() for exact match
       const { data: userData, error: userError } = await supabase
         .from("users")
         .select("id, email")
         .eq("email", newMemberEmail.trim())
-        .maybeSingle();
+        .single();
 
-      if (!userData) {
+      if (userError || !userData) {
         throw new Error("User not found. Please ensure the email is correct and the user has signed up.");
       }
+
+      console.log("Found user:", userData);
 
       // Step 2: Check if user is already a member
       const { data: existingMember, error: existingError } = await supabase
@@ -160,14 +163,20 @@ const WorkspaceDetails = () => {
         .select("id")
         .eq("workspace_id", id)
         .eq("user_id", userData.id)
-        .maybeSingle();
+        .single();
+
+      if (existingError && existingError.code !== 'PGRST116') {
+        throw existingError;
+      }
 
       if (existingMember) {
         throw new Error("User is already a member of this workspace.");
       }
 
+      console.log("User is not a member yet, proceeding with invitation");
+
       // Step 3: Add user as a member
-      const { error: memberError } = await supabase
+      const { data: newMember, error: memberError } = await supabase
         .from("workspace_members")
         .insert([
           {
@@ -175,9 +184,16 @@ const WorkspaceDetails = () => {
             user_id: userData.id,
             role: "member",
           },
-        ]);
+        ])
+        .select()
+        .single();
 
-      if (memberError) throw memberError;
+      if (memberError) {
+        console.error("Error adding workspace member:", memberError);
+        throw memberError;
+      }
+
+      console.log("Added workspace member:", newMember);
 
       // Step 4: Add board access for selected boards
       if (selectedBoards.length > 0) {
@@ -186,11 +202,17 @@ const WorkspaceDetails = () => {
           user_id: userData.id
         }));
 
-        const { error: boardMemberError } = await supabase
+        const { data: newBoardMembers, error: boardMemberError } = await supabase
           .from("board_members")
-          .insert(boardMembers);
+          .insert(boardMembers)
+          .select();
 
-        if (boardMemberError) throw boardMemberError;
+        if (boardMemberError) {
+          console.error("Error adding board members:", boardMemberError);
+          throw boardMemberError;
+        }
+
+        console.log("Added board members:", newBoardMembers);
       }
 
       toast({
@@ -201,7 +223,7 @@ const WorkspaceDetails = () => {
       setIsInviteOpen(false);
       setNewMemberEmail("");
       setSelectedBoards([]);
-      fetchWorkspaceDetails();
+      await fetchWorkspaceDetails(); // Add await here
     } catch (error: any) {
       console.error("Error adding member:", error);
       toast({
