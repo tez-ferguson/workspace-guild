@@ -16,43 +16,44 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Clear any existing session and check auth state on component mount
   useEffect(() => {
-    const clearSession = async () => {
-      try {
-        // Force sign out and clear any invalid sessions
-        await supabase.auth.signOut();
-      } catch (error) {
-        console.error("Error clearing session:", error);
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        navigate("/");
       }
     };
-    clearSession();
-  }, []);
+    checkSession();
+  }, [navigate]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Basic validation
-    if (!email || !password) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      setIsLoading(false);
-      return;
-    }
-
     try {
+      // Basic validation
+      if (!email || !password) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields",
+          variant: "destructive",
+        });
+        return;
+      }
+
       if (isSignUp) {
         if (!name) {
-          throw new Error("Name is required for signup");
+          toast({
+            title: "Error",
+            description: "Name is required for signup",
+            variant: "destructive",
+          });
+          return;
         }
 
         // First, try to sign up the user
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
-          email,
+          email: email.trim().toLowerCase(),
           password,
           options: {
             data: {
@@ -61,19 +62,24 @@ const Auth = () => {
           },
         });
 
-        if (signUpError) throw signUpError;
+        if (signUpError) {
+          if (signUpError.message.includes("already registered")) {
+            throw new Error("This email is already registered. Please sign in instead.");
+          }
+          throw signUpError;
+        }
 
         if (authData.user) {
           // Create the new user profile
           const { error: insertError } = await supabase
             .from("users")
-            .insert([{ id: authData.user.id, email, name }]);
+            .insert([{ id: authData.user.id, email: email.trim().toLowerCase(), name }]);
 
           if (insertError) throw insertError;
 
           toast({
             title: "Success",
-            description: "Account created successfully. Please verify your email and sign in.",
+            description: "Account created successfully. Please check your email for verification.",
           });
 
           // Switch to sign in mode
@@ -81,15 +87,16 @@ const Auth = () => {
           setPassword("");
         }
       } else {
-        // Regular sign in with session refresh
+        // Regular sign in
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email: email.trim().toLowerCase(), // Normalize email
+          email: email.trim().toLowerCase(),
           password,
         });
 
         if (signInError) {
+          console.error("Sign in error:", signInError);
           if (signInError.message.includes("Invalid login credentials")) {
-            throw new Error("Invalid email or password. Please try again.");
+            throw new Error("Invalid email or password. Please check your credentials and try again.");
           }
           throw signInError;
         }
