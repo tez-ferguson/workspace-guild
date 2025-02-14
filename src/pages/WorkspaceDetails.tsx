@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Settings, Trash2, UserPlus, ArrowLeft } from "lucide-react";
+import { Plus, Settings, Trash2, UserPlus, ArrowLeft, Minus } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -22,6 +22,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Member {
   id: string;
@@ -495,13 +501,26 @@ const WorkspaceDetails = () => {
                     {isOwner && member.user.id !== workspace.owner_id && (
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleMemberRole(member.id, member.role)}
-                          >
-                            {member.role === "member" ? "Promote to Owner" : "Demote to Member"}
-                          </Button>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => toggleMemberRole(member.id, member.role)}
+                                >
+                                  {member.role === "member" ? (
+                                    <Plus className="w-4 h-4 text-green-600" />
+                                  ) : (
+                                    <Minus className="w-4 h-4 text-orange-600" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {member.role === "member" ? "Promote to Owner" : "Demote to Member"}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           <Button
                             variant="ghost"
                             size="sm"
