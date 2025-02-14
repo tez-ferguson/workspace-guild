@@ -40,8 +40,14 @@ export function InviteMemberDialog({ workspaceId, isOpen, onClose, onSuccess }: 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
+      console.log('Attempting to send invitation with:', {
+        email: email.trim().toLowerCase(),
+        workspaceId,
+        invitedBy: user.id,
+      });
+
       // Call our edge function to handle the invitation
-      const { error: inviteError } = await supabase.functions.invoke('invite-user', {
+      const { data, error } = await supabase.functions.invoke('invite-user', {
         body: {
           email: email.trim().toLowerCase(),
           workspaceId,
@@ -49,7 +55,9 @@ export function InviteMemberDialog({ workspaceId, isOpen, onClose, onSuccess }: 
         },
       });
 
-      if (inviteError) throw inviteError;
+      console.log('Edge function response:', { data, error });
+
+      if (error) throw error;
 
       toast({
         title: "Success",
@@ -60,6 +68,7 @@ export function InviteMemberDialog({ workspaceId, isOpen, onClose, onSuccess }: 
       onSuccess();
       onClose();
     } catch (error: any) {
+      console.error('Error in handleInvite:', error);
       toast({
         title: "Error",
         description: error.message,
