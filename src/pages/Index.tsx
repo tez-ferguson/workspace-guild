@@ -62,10 +62,8 @@ const Index = () => {
         navigate("/auth");
         return;
       }
-      await Promise.all([
-        fetchWorkspaces(),
-        fetchInvitations(),
-      ]);
+      await fetchWorkspaces();
+      await fetchInvitations(); // Fetch invitations after workspaces
     } catch (error) {
       console.error("Session error:", error);
       navigate("/auth");
@@ -90,9 +88,13 @@ const Index = () => {
             name
           )
         `)
-        .eq("invited_email", user.email);
+        .eq("invited_email", user.email)
+        .order('created_at', { ascending: false }); // Get newest invitations first
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error:", error);
+        throw error;
+      }
 
       console.log("Raw invitations data:", data);
 
@@ -109,6 +111,11 @@ const Index = () => {
       setInvitations(transformedInvitations);
     } catch (error) {
       console.error("Error fetching invitations:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch invitations. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -144,11 +151,9 @@ const Index = () => {
         description: "You have joined the workspace",
       });
 
-      // Refresh workspaces and invitations
-      await Promise.all([
-        fetchWorkspaces(),
-        fetchInvitations(),
-      ]);
+      // First update invitations, then workspaces
+      await fetchInvitations();
+      await fetchWorkspaces();
     } catch (error: any) {
       toast({
         title: "Error",
@@ -394,3 +399,4 @@ const Index = () => {
 };
 
 export default Index;
+
