@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Plus, Settings, Trash2, UserPlus, ArrowLeft } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { ArrowLeft, Plus, Settings, Trash2, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Member {
   id: string;
@@ -54,6 +55,7 @@ const WorkspaceDetails = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
   const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [selectedBoards, setSelectedBoards] = useState<string[]>([]);
   const [newBoardName, setNewBoardName] = useState("");
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isNewBoardOpen, setIsNewBoardOpen] = useState(false);
@@ -158,7 +160,7 @@ const WorkspaceDetails = () => {
       }
 
       // Add user as a member
-      const { error: memberError } = await supabase
+      const { data: memberData, error: memberError } = await supabase
         .from("workspace_members")
         .insert([
           {
@@ -166,9 +168,25 @@ const WorkspaceDetails = () => {
             user_id: userData.id,
             role: "member",
           },
-        ]);
+        ])
+        .select()
+        .single();
 
       if (memberError) throw memberError;
+
+      // Add board access for selected boards
+      if (selectedBoards.length > 0) {
+        const boardMembers = selectedBoards.map(boardId => ({
+          board_id: boardId,
+          user_id: userData.id
+        }));
+
+        const { error: boardMemberError } = await supabase
+          .from("board_members")
+          .insert(boardMembers);
+
+        if (boardMemberError) throw boardMemberError;
+      }
 
       toast({
         title: "Success",
@@ -177,6 +195,7 @@ const WorkspaceDetails = () => {
 
       setIsInviteOpen(false);
       setNewMemberEmail("");
+      setSelectedBoards([]);
       fetchWorkspaceDetails();
     } catch (error: any) {
       toast({
@@ -395,7 +414,6 @@ const WorkspaceDetails = () => {
 
       <main className="max-w-7xl mx-auto pt-24 px-6 pb-16">
         <div className="grid gap-8">
-          {/* Members Section */}
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Members</h2>
@@ -447,7 +465,6 @@ const WorkspaceDetails = () => {
             </Table>
           </section>
 
-          {/* Boards Section */}
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Boards</h2>
@@ -491,105 +508,131 @@ const WorkspaceDetails = () => {
               </div>
             )}
           </section>
+
+          {/* Add Member Dialog with Board Selection */}
+          <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Member</DialogTitle>
+                <DialogDescription>
+                  Enter the email address and select boards to grant access
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={newMemberEmail}
+                    onChange={(e) => setNewMemberEmail(e.target.value)}
+                    placeholder="member@example.com"
+                  />
+                </div>
+                {boards.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Grant Access to Boards</Label>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {boards.map((board) => (
+                        <div key={board.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`board-${board.id}`}
+                            checked={selectedBoards.includes(board.id)}
+                            onCheckedChange={(checked) => {
+                              setSelectedBoards(prev =>
+                                checked
+                                  ? [...prev, board.id]
+                                  : prev.filter(id => id !== board.id)
+                              );
+                            }}
+                          />
+                          <Label htmlFor={`board-${board.id}`}>{board.name}</Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsInviteOpen(false);
+                    setSelectedBoards([]);
+                  }}
+                  disabled={isProcessing}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={inviteMember} disabled={isProcessing}>
+                  {isProcessing ? "Adding..." : "Add Member"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* New Board Dialog */}
+          <Dialog open={isNewBoardOpen} onOpenChange={setIsNewBoardOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New Board</DialogTitle>
+                <DialogDescription>
+                  Give your board a name to get started
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="boardName">Board Name</Label>
+                  <Input
+                    id="boardName"
+                    value={newBoardName}
+                    onChange={(e) => setNewBoardName(e.target.value)}
+                    placeholder="Enter board name"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsNewBoardOpen(false)}
+                  disabled={isProcessing}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={createBoard} disabled={isProcessing}>
+                  {isProcessing ? "Creating..." : "Create Board"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Confirm Leave Dialog */}
+          <Dialog open={isConfirmLeaveOpen} onOpenChange={setIsConfirmLeaveOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Leave Workspace</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to leave this workspace? You will lose access to all boards and won't be able to rejoin unless invited again.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsConfirmLeaveOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={leaveWorkspace}
+                >
+                  Leave Workspace
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </main>
-
-      {/* Add Member Dialog */}
-      <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add New Member</DialogTitle>
-            <DialogDescription>
-              Enter the email address of the user you want to add
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
-              <Input
-                id="email"
-                type="email"
-                value={newMemberEmail}
-                onChange={(e) => setNewMemberEmail(e.target.value)}
-                placeholder="member@example.com"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setIsInviteOpen(false)}
-              disabled={isProcessing}
-            >
-              Cancel
-            </Button>
-            <Button onClick={inviteMember} disabled={isProcessing}>
-              {isProcessing ? "Adding..." : "Add Member"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* New Board Dialog */}
-      <Dialog open={isNewBoardOpen} onOpenChange={setIsNewBoardOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Board</DialogTitle>
-            <DialogDescription>
-              Give your board a name to get started
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="boardName">Board Name</Label>
-              <Input
-                id="boardName"
-                value={newBoardName}
-                onChange={(e) => setNewBoardName(e.target.value)}
-                placeholder="Enter board name"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setIsNewBoardOpen(false)}
-              disabled={isProcessing}
-            >
-              Cancel
-            </Button>
-            <Button onClick={createBoard} disabled={isProcessing}>
-              {isProcessing ? "Creating..." : "Create Board"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirm Leave Dialog */}
-      <Dialog open={isConfirmLeaveOpen} onOpenChange={setIsConfirmLeaveOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Leave Workspace</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to leave this workspace? You will lose access to all boards and won't be able to rejoin unless invited again.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setIsConfirmLeaveOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={leaveWorkspace}
-            >
-              Leave Workspace
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
