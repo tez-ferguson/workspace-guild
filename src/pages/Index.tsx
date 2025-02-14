@@ -43,37 +43,39 @@ const Index = () => {
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    fetchWorkspaces();
+    checkSession();
   }, []);
+
+  const checkSession = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
+      fetchWorkspaces();
+    } catch (error) {
+      console.error("Session error:", error);
+      navigate("/auth");
+    }
+  };
 
   const handleSignOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      // Even if there's an error, we want to clear the local session
-      if (error) {
-        console.error("Error signing out:", error);
-        // If it's a session not found error, we can ignore it
-        if (error.message.includes("session_not_found")) {
-          navigate("/auth");
-          return;
-        }
-        throw error;
-      }
+      await supabase.auth.signOut();
       navigate("/auth");
     } catch (error: any) {
-      toast({
-        title: "Error signing out",
-        description: error.message,
-        variant: "destructive",
-      });
+      console.error("Error signing out:", error);
+      // If there's an error but it's just that the session wasn't found,
+      // we still want to redirect to auth
+      navigate("/auth");
     }
   };
 
   const fetchWorkspaces = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
         navigate("/auth");
         return;
       }
@@ -90,7 +92,7 @@ const Index = () => {
             owner_id
           )
         `)
-        .eq("user_id", user.id);
+        .eq("user_id", session.user.id);
 
       if (workspacesError) throw workspacesError;
 
@@ -98,7 +100,7 @@ const Index = () => {
       const workspacesWithBoards = await Promise.all(
         workspacesData.map(async (ws) => {
           // If user is the workspace owner, fetch all boards
-          if (ws.workspaces.owner_id === user.id) {
+          if (ws.workspaces.owner_id === session.user.id) {
             const { data: boards } = await supabase
               .from("boards")
               .select("id, name, created_at")
@@ -117,7 +119,7 @@ const Index = () => {
           const { data: boardMembers } = await supabase
             .from("board_members")
             .select("board_id")
-            .eq("user_id", user.id);
+            .eq("user_id", session.user.id);
 
           const boardIds = (boardMembers || []).map(bm => bm.board_id);
 
@@ -155,8 +157,11 @@ const Index = () => {
     setIsCreating(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
 
       // Create workspace
       const { data: workspace, error: workspaceError } = await supabase
@@ -164,7 +169,7 @@ const Index = () => {
         .insert([
           {
             name: newWorkspaceName.trim(),
-            owner_id: user.id,
+            owner_id: session.user.id,
           },
         ])
         .select()
@@ -178,7 +183,7 @@ const Index = () => {
         .insert([
           {
             workspace_id: workspace.id,
-            user_id: user.id,
+            user_id: session.user.id,
             role: "owner",
           },
         ]);
