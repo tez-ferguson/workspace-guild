@@ -309,6 +309,29 @@ const Index = () => {
         return;
       }
 
+      // First, ensure user exists in public.users table
+      const { data: existingUser, error: userCheckError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', user.id)
+        .single();
+
+      if (userCheckError || !existingUser) {
+        // User doesn't exist in public.users, create them
+        const { error: userCreateError } = await supabase
+          .from('users')
+          .insert([
+            {
+              id: user.id,
+              email: user.email,
+              name: user.user_metadata.name || user.email?.split('@')[0] || 'Unknown User'
+            }
+          ]);
+
+        if (userCreateError) throw userCreateError;
+      }
+
+      // Now create the workspace
       const { data: workspace, error: workspaceError } = await supabase
         .from("workspaces")
         .insert([
@@ -343,6 +366,7 @@ const Index = () => {
       setNewWorkspaceName("");
       fetchWorkspaces();
     } catch (error: any) {
+      console.error('Workspace creation error:', error);
       toast({
         title: "Error",
         description: error.message,
